@@ -1,0 +1,39 @@
+name: rust-wasm-study
+on: [push]
+env:
+    RUSTUP_TOOLCHAIN: "1.62"
+    RUSTUP_HOME: "./rust/rustup"
+    CARGO_HOME: "./rust/cargo"
+
+jobs:
+  build-rust-wasm-study:
+    runs-on: ubuntu-latest
+    steps:
+     - name: Checkout repository
+       uses: actions/checkout@v2
+       with:
+        submodules: recursive
+     - name: Cache Rust
+       id: cache-rust
+       uses: actions/cache@v3
+       with:
+        path: rust
+        key: ${{ runner.os }}-rustup-${{env.RUSTUP_TOOLCHAIN}}
+     - name: Install rust
+       if: steps.cache-rust.outputs.cache-hit != 'true'
+       run: |
+              mkdir -p $RUSTUP_HOME
+              mkdir -p $CARGO_HOME
+              curl https://sh.rustup.rs -sSf | sh -s -- -y
+              rustup install $RUSTUP_TOOLCHAIN
+              rustup target add wasm32-wasi --toolchain $RUSTUP_TOOLCHAIN
+              rustup target add wasm32-unknown-unknown --toolchain $RUSTUP_TOOLCHAIN
+     - name: Configure Rust and display version
+       run: |
+           echo "PATH=$(dirname $(rustup which cargo)):$PATH" >> $GITHUB_ENV
+           rustc --version
+           cargo --version
+     - name: Build Rust Wasm Study
+       run: | 
+          cd wasm-module1
+          cargo build --target wasm32-wasi
