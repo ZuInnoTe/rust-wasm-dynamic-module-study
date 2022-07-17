@@ -16,6 +16,7 @@ All those aspects can be summarized as follows:
 * Cross-plattform support
 * Modules can be loaded dynamically based on a need basis
 * Modules can be load securely - this means all interactions happen through precise interfaces, clear memory separation (no rouge module can bring down the whole application) and we can define additional policies what a module is allowed to do and what not (e.g. access to filesystem)
+* There are potential large data volumes to be exchanged between modules - it is not only about parameters and some return values
 
 ## Code
 The code is available under:
@@ -33,7 +34,7 @@ Note: the [C++ ABI](https://gcc.gnu.org/onlinedocs/libstdc++/manual/abi.html) - 
 
 
 While WASM is the final choice, because it fits all criteria of the use case, there are still some aspects yet missing to fit the use case of ZuSearch:
-* 64-Bit memory - large scale search applications - especially with a lot of documents and/or machine learning augmented search - require a lot of memory. Currently, only 32-bit of memory are supported, but the standardization of 64-bit memory is on its way (see [here](https://github.com/WebAssembly/memory64/blob/main/proposals/memory64/Overview.md)).
+* 64-Bit memory - large scale search applications - especially with a lot of documents and/or machine learning augmented search - require a lot of memory. Currently, only 32-bit of memory are supported, but the standardization of 64-bit memory is on its way (see [here](https://github.com/WebAssembly/memory64/blob/main/proposals/memory64/Overview.md)). Nevertheless, since each module can have up to 4 GB and each thread can instantiate their own module this might be not as limiting as one might think, but it limits more flexibility/practicality.
 * Component model - especially WASM Interface Types (WIT). At the moment, an application can only share with a module a common memory ("Store") or simple integer parameters. However, ZuSearch likely will involve complex interfaces with different basic types (e.g. strings) or complex structures (e.g. arrays, structs etc.). While they can be handed over in memory - there is no standard on how a string or structure looks like and every programming language represents them differently. A standard can help here to reduce the development efforts especially in differrent programming languages. See [here](https://github.com/WebAssembly/component-model) for the standardization and [here](https://radu-matei.com/blog/intro-wasm-components/) for a blog describing more practical aspects.
 * Exception handling - exceptions do not currently interrupt execution of the application and/or module. See [here](https://github.com/WebAssembly/exception-handling/blob/master/proposals/exception-handling/Exceptions.md) for the standardization
 * Module repository. Many programming languages have module repositories (e.g. Maven Central for Java, Pypi for Python, NPM for Javascript/Typescript etc.) that include (binary/transpiled etc.) version of the modules to be loaded by an application (usually at compile time, but also at runtime). The way to access them is standardized. WASM has no standard for module repositories, but there are multiple competing once (see e.g. this [blog post](https://zuinnote.eu/blog/?p=1567)). The usage of module repositories compared
@@ -41,7 +42,7 @@ While WASM is the final choice, because it fits all criteria of the use case, th
 * There is still the need to use (implicitly) unsafe for certain scenarios. It is unclear if this restriction can be removed.
 
 
-Fortunately, those are are addressed or being addressed (see also [WebAssembly Roadmap](https://webassembly.org/roadmap/)). They do not block the further development of ZuSearch if not yet fully available. Nevertheless, the core assumption is that they become available eventually to realize all benefits and requirements of the use case.
+Fortunately, those are are addressed or being addressed (see also [WebAssembly Roadmap](https://webassembly.org/roadmap/) or [active WebAssembly Proposals](https://github.com/WebAssembly/proposals)). They do not block the further development of ZuSearch if not yet fully available. Nevertheless, the core assumption is that they become available eventually to realize all benefits and requirements of the use case.
 
 # Runtime choices
 
@@ -50,22 +51,38 @@ There are a lot of runtimes (see e.g. this [blog post](https://zuinnote.eu/blog/
 Please folllow the websites to install it.
 
 
+# Exchange of data between application and modules
+A crucial part is how the application and the modules exchange data via the shared memory as the WASM component model is currently not standardized. We look at the following aspects:
+* Exchange via C types (via the established C ABI). Usually many programming languages have support for this, but it expects from the developer a lot of "boilerplate" code. 
+* Exchange via Rust types. While other programming languages can read any data, the processing of Rust datatypes in other programming languages
+* Exchange via [Apache Arrow](https://arrow.apache.org/). Apache Arrow is an in-memory analytics format that can be read in many different programming languages and is mostly for tabular data. While this is less useful for standard module integration (functions with different parameters, returning value(s)), it still can be very useful for the case of ZuSearch where different modules need to process data.
+
+
 # Study
 The study here is a very simple application written in Rust that loads dynamically a module written in Rust compiled to WASM:
 * [wasm-app](./wasm-app/) - the main application that loads dynamically module1 with a parameter
 * [wasm-module1](./wasm-module1/) - an example module that has one function with a parameter name that returns the string "Hello World, Name!".
+  * Covers exchange via C types and Rust types
+* [wasm-module2](./wasm-module2/) - an example module that has a functions with the parameter "command" (i32) and a parameter containig an Arrow representation of a string
 
 
 We compile in Rust the module to the target "wasm32-wasi" (see [here](https://doc.rust-lang.org/stable/nightly-rustc/rustc_target/spec/wasm32_wasi/index.html)).
 
+Note: We also link the WASI modules dynamically into the module. However, WASI is still experimental and standardization not finalized. We could also circumwent the use of WASI (e.g. by not relying on std etc.), but since WASI will anyway be needed for the use case of ZuSearch (e.g. file, network accesss as well as corresponding permissions) we included it also in the study.
 
-Note: We do not use WASI at this stage, ie the wasm-module1 does simply create a custom string saying "Hello World, Name" that is later printed by the main application on the screen.
 
 # Observations
 
-As mentioned before, there are some limitations:
 * The application cannot be compiled to wasm32-wasi yet (although desired for the future to leverage WASM also in the ZuSearch core), because wasmtime or more specifically WASI does not seem to support this yet.
 * We use cdylib to create the WASM (but we do not need to use unsafe with WASM) - this is needed because the WASM Interface Type (WIT), ie the WASM component model is not yet fully specified and implemented
-* Including the wasmtime runtime in the application leads to a large single binary (ca. 149 MB wasmtime 0.38.1)
+* Including the wasmtime runtime in the application leads to a larger single binary (ca. 14 MB wasmtime 0.38.1 compiled as release). While the size is not very large, it limits the type of embedded device where to deploy it. However, the use case of ZuSearch also does not justify to embedd it on any device (e.g. Arduino would be out of scope).
 * While there is a WASM Component Example (cf. [here](https://github.com/radu-matei/wasm-components-example)) - it only describes static linking at compile time and it is unclear yet if this works at runtime as well.
-* Until the WASM component model is standardized and implemented, one needs to exchange data via a shared memory with the module. While this is possible, the module needs to validate the data in the [shared memory](https://docs.rs/wasmtime/0.38.1/wasmtime/struct.Memory.html) for correctness and the application needs to also check that returned data is correct. Especially one needs to make sure that no memory out-of-bound is accessed, shared memory is very short-lived, memory operations are atomic and that multiple threads do not overwrite each others data.  For the latter case it might be best that each thread instantiate its own module. 
+* Until the WASM component model is standardized and implemented, one needs to exchange data via a shared memory with the module. While this is possible, the module needs to validate the data in the [shared memory](https://docs.rs/wasmtime/0.38.1/wasmtime/struct.Memory.html) for correctness and the application needs to also check that returned data is correct. Especially one needs to make sure that no memory out-of-bound is accessed, shared memory is very short-lived, memory operations are atomic and that multiple threads do not overwrite each others data.  For the latter case it might be best that each thread instantiate its own module. Finally, one needs to take care that the memory is converted to programming-language specific datatypes, which will be cumbersome to support. 
+  * We covered in the study different ways on exchanging data between the app and memory
+  * It is not clear if the WASM component model interface types bring any advantage over using Apache Arrow for exchange as the WASM component model interface types is merely for calling functions with parameters and return values. Especially since for the case of ZuSearch, we do not have necessarily complex module interfaces, but the main focus is data processing.
+* Apache Arrow seems to increase the module size not significantly (to be tested)
+* If we exchange a lot of data between modules, one should avoid to return a copy of the data with some modification as this always implies at least have double of the memory size. For example let us assume you have the data ```{"doc1": {title: "test", cotent:"this is a test"}, "doc2": {title: "spare thing", cotent:"this is a spare part"}``` and you have a function that replaces all occureances of "part" with "piece" then the function would still return the full data, ie including doc1 and the title of doc2, although they are not modified at all. Here one may better replace the data in-place (maybe with some indicator if it has changed).
+* The shared memory might need to grow and this is not automatic - it has to be initiated, ie one needs to check if the data to be written still fits into the memory - a simple and clear function need to be written for this. While this is not an issue with rather standard WASM modules, it will be for the use case of ZuSearch as often the default page size might not be sufficient. The default page seems to be somehow standardized (?) around 64 KB (see [here](https://docs.rs/wasmtime-environ/0.28.0/wasmtime_environ/constant.WASM_PAGE_SIZE.html) for wasmtime), but may be different in certain scenarios.
+* There is some inherent memory safety of the shared memory, e.g. one cannot read more then what is available and with a clear separation of memory of different modules (and/or different threads of the same module) one can avoid that they read/write in each memory
+ * One needs to check the number of modules etc. to avoid that unncessary memory is allocated to them, ie do load everything in memory and then process, but more lightweight (load chunks into memory and process)
+ * Modules might need to request memory themselves from the application calling them to store potentially additional data due to the transformations they do on the input data (e.g. in case of zusearch replacing in a text > 64 KB certain values). Again, this should be avoid as much as possible, a maximum memory limit / module / instance should be configurable. The system itself should be designed to stream data through modules, avoid conversion steps and reducing memory usage.
