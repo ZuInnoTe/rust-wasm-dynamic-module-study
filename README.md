@@ -1,7 +1,7 @@
 # Introduction
 State: 16.07.2022
 
-**NOTE: THIS EXAMPLE USES FEATURES WORK-IN-PROGRESS - DO NOT USE FOR PRODUCTION APPLICATIONS**
+**NOTE: THIS EXAMPLE USES FEATURES WORK-IN-PROGRESS AND DOES NOT INCORPORATE NECESSARY SAFETY MECHANISMS - DO NOT USE FOR PRODUCTION APPLICATIONS**
 
 This is a small example to use Rust for an application with target wasm32-wasi to load dynamically another application module targetting wasm32-wasi. This target enables compilation to [Webassembly](https://webassembly.org/) (WASM). Originally WASM was a framework for secure near-native speed browser applications, it has been extended in the past to serve the needs of all types of cross-platform secure native applications, such as server-based or serverless ones. See also this [blog post](https://zuinnote.eu/blog/?p=1567) to find out more on the WASM ecosystem.
 

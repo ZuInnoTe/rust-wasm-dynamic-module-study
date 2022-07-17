@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = {version = "1.0.58"}
-arrow = { version = "18.0.0", default-features = false, features = [] }
+arrow = { version = "18.0.0", default-features = false, features = ["ipc"] }
 wasmtime = { version = "0.38.1"}
 wasmtime-wasi = { version = "0.38.1"}
