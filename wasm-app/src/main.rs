@@ -27,19 +27,15 @@ fn main() {
     println!("Result from WASM function \"answer\": {}", result_answer);
     println!("Running WASM function c_format_hello_world...");
     let result_c_format_hello_world =
-        wrapper_wasm_c_format_hello_world(&engine, &module, "Rust (C ABI)")
-            .unwrap();
+        wrapper_wasm_c_format_hello_world(&engine, &module, "Rust (C ABI)").unwrap();
     println!(
         "Result from WASM function \"c_format_hello_world\": {}",
         result_c_format_hello_world
     );
     println!("Running WASM function rust_format_hello_world...");
-    let result_rust_format_hello_world = wrapper_wasm_rust_format_hello_world(
-        &engine,
-        &module,
-        "Rust (Rust ABI)".to_string(),
-    )
-    .unwrap();
+    let result_rust_format_hello_world =
+        wrapper_wasm_rust_format_hello_world(&engine, &module, "Rust (Rust ABI)".to_string())
+            .unwrap();
     println!(
         "Result from WASM function \"rust_format_hello_world\": {}",
         result_rust_format_hello_world
@@ -128,8 +124,15 @@ fn wrapper_wasm_c_format_hello_world(
     let instance: Instance = linker.instantiate(&mut store, &module).unwrap();
     // allocate shared memory for the parameter
     // allocate some memory within the WASM module
-    let offset: u32 = wrapper_wasm_allocate(&engine, &module, instance, &mut store, param_name_cstring_as_bytes.len() as u32).unwrap() as u32;
-  
+    let offset: u32 = wrapper_wasm_allocate(
+        &engine,
+        &module,
+        instance,
+        &mut store,
+        param_name_cstring_as_bytes.len() as u32,
+    )
+    .unwrap() as u32;
+
     // get the function
     let func_def = instance
         .get_func(&mut store, "wasm_memory_c_format_hello_world")
@@ -145,24 +148,40 @@ fn wrapper_wasm_c_format_hello_world(
     memory.write(
         &mut store,
         offset.try_into().unwrap(),
-        param_name_cstring_as_bytes
+        param_name_cstring_as_bytes,
     );
     // call function answer
-    let mut result_offset = func_validated.call(&mut store, offset)?;
-
+    let result_offset = func_validated.call(&mut store, offset)?;
+    let mut result_offset_position = result_offset;
     // read answer
     let mut buffer = [1u8; 1];
     let mut result_v_u8: Vec<u8> = Vec::new();
     while buffer[0] != 0u8 {
-        memory.read(&store, result_offset.try_into().unwrap(), &mut buffer)?;
+        memory.read(
+            &store,
+            result_offset_position.try_into().unwrap(),
+            &mut buffer,
+        )?;
         result_v_u8.push(buffer[0]);
-        result_offset += 1;
+        result_offset_position += 1;
     }
-        // deallocate shared WASM Module memory
-        let dealloc_code: i32 = wrapper_wasm_deallocate(engine, module, instance, &mut store, offset as  *const u8).unwrap();
-        if dealloc_code != 0 {
-            println!("Error: Could not deallocate shared WASM module memory");
-        }
+    // deallocate shared WASM Module memory
+    let dealloc_param_code: i32 =
+        wrapper_wasm_deallocate(engine, module, instance, &mut store, offset as *const u8).unwrap();
+    if dealloc_param_code != 0 {
+        println!("Error: Could not deallocate shared WASM module memory for parameter");
+    }
+    let dealloc_return_code: i32 = wrapper_wasm_deallocate(
+        engine,
+        module,
+        instance,
+        &mut store,
+        result_offset as *const u8,
+    )
+    .unwrap();
+    if dealloc_return_code != 0 {
+        println!("Error: Could not deallocate shared WASM module memory for result");
+    }
     // convert answer
     let c_str: &CStr = unsafe { CStr::from_ptr(result_v_u8.as_ptr() as *const i8) };
     let result_str: &str = c_str.to_str().unwrap();
@@ -209,23 +228,39 @@ fn wrapper_wasm_rust_format_hello_world(
     let param_name_str: String = func_name.to_string();
     let param_name_string_as_bytes: &[u8] = param_name_str.as_bytes();
     // allocate some memory within the WASM module
-    let offset: u32 = wrapper_wasm_allocate(&engine, &module, instance, &mut store, param_name_string_as_bytes.len() as u32).unwrap() as u32;
+    let offset: u32 = wrapper_wasm_allocate(
+        &engine,
+        &module,
+        instance,
+        &mut store,
+        param_name_string_as_bytes.len() as u32,
+    )
+    .unwrap() as u32;
     let length: u32 = param_name_str.len() as u32;
     memory.write(
         &mut store,
         offset.try_into().unwrap(),
-        param_name_string_as_bytes
+        param_name_string_as_bytes,
     );
     // call function answer
-    let mut result_offset = func_validated.call(&mut store, (offset, length))?;
+    let result_offset = func_validated.call(&mut store, (offset, length))?;
+    let mut result_offset_position = result_offset;
     // read answer from memory: these are two values: offset and length of the return string
     // read metadata (offset and length of the sring)
     // note: WebAssembly is by default 32 bit
     let mut ptr_buffer = [0u8; (u32::BITS / 8) as usize];
     let mut len_buffer = [0u8; (u32::BITS / 8) as usize];
-    memory.read(&store, result_offset.try_into().unwrap(), &mut ptr_buffer)?;
-    result_offset += (u32::BITS / 8) as u32;
-    memory.read(&store, result_offset.try_into().unwrap(), &mut len_buffer)?;
+    memory.read(
+        &store,
+        result_offset_position.try_into().unwrap(),
+        &mut ptr_buffer,
+    )?;
+    result_offset_position += (u32::BITS / 8) as u32;
+    memory.read(
+        &store,
+        result_offset_position.try_into().unwrap(),
+        &mut len_buffer,
+    )?;
     let result_ptr = u32::from_le_bytes(ptr_buffer);
     let result_len = u32::from_le_bytes(len_buffer);
     // read the string
@@ -236,45 +271,78 @@ fn wrapper_wasm_rust_format_hello_world(
         result_ptr.try_into().unwrap(),
         &mut result_str_buffer,
     )?;
-           // deallocate shared WASM Module memory
-           let dealloc_code: i32 = wrapper_wasm_deallocate(engine, module, instance, &mut store, offset as  *const u8).unwrap();
-           if dealloc_code != 0 {
-               println!("Error: Could not deallocate shared WASM module memory");
-           }
+    // deallocate shared WASM Module memory
+    let dealloc_param_code: i32 =
+        wrapper_wasm_deallocate(engine, module, instance, &mut store, offset as *const u8).unwrap();
+    if dealloc_param_code != 0 {
+        println!("Error: Could not deallocate shared WASM module memory for parameter");
+    }
+    let dealloc_return__meta_code: i32 = wrapper_wasm_deallocate(
+        engine,
+        module,
+        instance,
+        &mut store,
+        result_offset as *const u8,
+    )
+    .unwrap();
+    if dealloc_return__meta_code != 0 {
+        println!("Error: Could not deallocate shared WASM module memory for return metadata");
+    }
+    let dealloc_return_data_code: i32 = wrapper_wasm_deallocate(
+        engine,
+        module,
+        instance,
+        &mut store,
+        result_ptr as *const u8,
+    )
+    .unwrap();
+    if dealloc_return_data_code != 0 {
+        println!("Error: Could not deallocate shared WASM module memory for return data");
+    }
     let result_str: String = unsafe { String::from_utf8_lossy(&result_str_buffer).into_owned() };
     Ok(result_str.to_string())
 }
 
-
 /// Wrapper around the allocate function of the WASM module to allocate shared WASM memory. Allocate some memory for the application to write data for the module
 /// Note: It is up to the application (and not the WASM module) to provide enough pages, so the module does not run out of memory
- /// # Arguments
+/// # Arguments
 /// * `size` - size of memory to allocaten
 /// returns a pointer to the allocated memory area
-fn wrapper_wasm_allocate(engine: &Engine, module: &Module, instance: Instance, mut store : impl AsContextMut<Data = MyState>, size: u32) -> Result<*const u8> { // Load function an instantiate it
-  
+fn wrapper_wasm_allocate(
+    engine: &Engine,
+    module: &Module,
+    instance: Instance,
+    mut store: impl AsContextMut<Data = MyState>,
+    size: u32,
+) -> Result<*const u8> {
+    // Load function an instantiate it
+
     // get the function
     let func_def = instance
-        .get_func(&mut store, "allocate")
-        .expect("`allocate` was not an exported function");
+        .get_func(&mut store, "wasm_allocate")
+        .expect("`wasm_allocate` was not an exported function");
     // validate that it corresponds to the parameters and return types we need
     let func_validated = func_def.typed::<u32, u32, _>(&store)?;
     // call function
     let result = func_validated.call(&mut store, size)?;
     Ok(result as *const u8)
-
 }
-
 
 ///  Wrapper around the deallocate function of the WASM module to deallocate shared WASM memory. Deallocates existing memory for the purpose of the application
 /// # Arguments
 /// * `ptr` - mutuable pointer to the memory to deallocate
 /// returns a code if it was successful or not
-fn wrapper_wasm_deallocate(engine: &Engine, module: &Module, instance: Instance, mut store : impl AsContextMut<Data = MyState>, mut ptr: *const u8) -> Result<i32> {
-     // get the function
+fn wrapper_wasm_deallocate(
+    engine: &Engine,
+    module: &Module,
+    instance: Instance,
+    mut store: impl AsContextMut<Data = MyState>,
+    mut ptr: *const u8,
+) -> Result<i32> {
+    // get the function
     let func_def = instance
-        .get_func(&mut store, "deallocate")
-        .expect("`deallocate` was not an exported function");
+        .get_func(&mut store, "wasm_deallocate")
+        .expect("`wasm_deallocate` was not an exported function");
     // validate that it corresponds to the parameters and return types we need
     let func_validated = func_def.typed::<u32, i32, _>(&store)?;
     // call function
