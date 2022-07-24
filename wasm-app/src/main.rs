@@ -1,5 +1,5 @@
 //!  mostly adapted from: https://docs.rs/wasmtime/latest/wasmtime/
-use anyhow::Result;
+use anyhow;
 use wasmtime::AsContextMut;
 use wasmtime::Engine;
 use wasmtime::Instance;
@@ -8,9 +8,20 @@ use wasmtime::Module;
 use wasmtime::Store;
 use wasmtime_wasi::{sync::WasiCtxBuilder, WasiCtx};
 
-use std::ffi::CString;
-
 use std::ffi::CStr;
+use std::ffi::CString;
+use std::io::Cursor;
+use std::sync::Arc;
+
+use arrow::array::{Array, Float64Array, TimestampSecondArray, StringArray, StructArray,UInt64Array};
+use arrow::datatypes::{DataType, Field, Schema,TimeUnit};
+use arrow::error;
+use arrow::ipc::reader::StreamReader;
+use arrow::ipc::writer::StreamWriter;
+use arrow::record_batch::RecordBatch;
+use arrow::util::pretty::print_batches;
+
+use time::{macros::datetime};
 
 struct MyState {
     wasi: WasiCtx,
@@ -20,19 +31,19 @@ struct MyState {
 fn main() {
     println!("Initializing WASM engine...");
     let engine: Engine = init_wasm_engine().unwrap();
-    println!("Loading WASM module...");
-    let module: Module = init_wasm_module(&engine).unwrap();
-    println!("Running WASM function answer...");
+    println!("Loading WASM module 1...");
+    let module: Module = init_wasm_module_1(&engine).unwrap();
+    println!("Module1: Running WASM function answer...");
     let result_answer = wrapper_answer(&engine, &module).unwrap();
     println!("Result from WASM function \"answer\": {}", result_answer);
-    println!("Running WASM function c_format_hello_world...");
+    println!("Module 1: Running WASM function c_format_hello_world...");
     let result_c_format_hello_world =
         wrapper_wasm_c_format_hello_world(&engine, &module, "Rust (C ABI)").unwrap();
     println!(
         "Result from WASM function \"c_format_hello_world\": {}",
         result_c_format_hello_world
     );
-    println!("Running WASM function rust_format_hello_world...");
+    println!("Module 1: Running WASM function rust_format_hello_world...");
     let result_rust_format_hello_world =
         wrapper_wasm_rust_format_hello_world(&engine, &module, "Rust (Rust ABI)".to_string())
             .unwrap();
@@ -40,22 +51,27 @@ fn main() {
         "Result from WASM function \"rust_format_hello_world\": {}",
         result_rust_format_hello_world
     );
+    println!("Loading WASM module 2...");
+    let module: Module = init_wasm_module_1(&engine).unwrap();
+    println!("Module 2: Running WASM function arrow_process_document...");
+    create_arrow_example_data();
+    create_arrow_example_meta_data();
 }
 
 /// Init the WASM Engine
 /// returns the WASM engine
-fn init_wasm_engine() -> Result<Engine> {
+fn init_wasm_engine() -> anyhow::Result<Engine> {
     // Create an "Engine" to run wasm modules
     let engine = Engine::default();
     Ok(engine)
 }
 
-/// Initialize WASM module
+/// Initialize WASM module 1
 /// # Arguments
 /// * `engine` - wasmtime engine to use for the store
 /// * `store` - in-memory store to use to exchange data with the function
 /// returns the module
-fn init_wasm_module(engine: &Engine) -> Result<Module> {
+fn init_wasm_module_1(engine: &Engine) -> anyhow::Result<Module> {
     // load WASM module
     let module = Module::from_file(
         &engine,
@@ -64,12 +80,28 @@ fn init_wasm_module(engine: &Engine) -> Result<Module> {
     Ok(module)
 }
 
+
+/// Initialize WASM module 2
+/// # Arguments
+/// * `engine` - wasmtime engine to use for the store
+/// * `store` - in-memory store to use to exchange data with the function
+/// returns the module
+fn init_wasm_module_2(engine: &Engine) -> anyhow::Result<Module> {
+    // load WASM module
+    let module = Module::from_file(
+        &engine,
+        "../../../wasm-module2/target/wasm32-wasi/debug/wasm_module2.wasm",
+    )?;
+    Ok(module)
+}
+
+
 /// Wrapper around the function answer of the WASM Module. This is needed as the standardization of the componennt model and webassembly interface types is still work-in-progress
 /// # Arguments (note the function `answer` of the WASM module itself has no parameters. The parameters are just to initialize the runtime environment)
 /// * `engine` - wasmtime engine to use for the store
 /// * `module` - module containing the WASM function
 /// returns the result of the function `answer`
-fn wrapper_answer(engine: &Engine, module: &Module) -> Result<i32> {
+fn wrapper_answer(engine: &Engine, module: &Module) -> anyhow::Result<i32> {
     // Load function an instantiate it
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
@@ -104,7 +136,7 @@ fn wrapper_wasm_c_format_hello_world(
     engine: &Engine,
     module: &Module,
     func_name: &str,
-) -> Result<String> {
+) -> anyhow::Result<String> {
     // convert param to CString
     let param_name_str = func_name;
     let param_name_cstring: CString = CString::new(param_name_str).unwrap();
@@ -199,7 +231,7 @@ fn wrapper_wasm_rust_format_hello_world(
     engine: &Engine,
     module: &Module,
     func_name: String,
-) -> Result<String> {
+) -> anyhow::Result<String> {
     // Load function an instantiate it
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
@@ -314,7 +346,7 @@ fn wrapper_wasm_allocate(
     instance: Instance,
     mut store: impl AsContextMut<Data = MyState>,
     size: u32,
-) -> Result<*const u8> {
+) -> anyhow::Result<*const u8> {
     // Load function an instantiate it
 
     // get the function
@@ -338,7 +370,7 @@ fn wrapper_wasm_deallocate(
     instance: Instance,
     mut store: impl AsContextMut<Data = MyState>,
     mut ptr: *const u8,
-) -> Result<i32> {
+) -> anyhow::Result<i32> {
     // get the function
     let func_def = instance
         .get_func(&mut store, "wasm_deallocate")
@@ -348,4 +380,114 @@ fn wrapper_wasm_deallocate(
     // call function
     let result = func_validated.call(&mut store, ptr as u32)?;
     Ok(result)
+}
+
+/// Create example data
+/// {id: 1, content: "this is a test", title: "test",date:"2022-01-01T12:00:00Z", score: 1.77}
+/// returns a binary representation of the data in Arrow IPC format
+fn create_arrow_example_data() -> Vec<u8> {
+    // define schema
+    let schema = Schema::new(vec![Field::new(
+        "metadata",
+        DataType::Struct(vec![
+
+            Field::new("id", DataType::UInt64, false),
+            Field::new("content", DataType::Utf8, false),
+            Field::new("title", DataType::Utf8, false),
+            Field::new("date", DataType::Timestamp(TimeUnit::Second,Some("+00:00".to_string())), false),
+            Field::new("score", DataType::Float64, false),
+        ]),
+        false,
+    )]);
+    // define one data item
+    let metadata = StructArray::from(vec![
+        (
+            Field::new("id", DataType::UInt64, false),
+            Arc::new(UInt64Array::from(vec![1])) as Arc<dyn Array>,
+        ),
+        (
+            Field::new("content", DataType::Utf8, false),
+            Arc::new(StringArray::from(vec!["this is a test"])) as Arc<dyn Array>,
+        ),      
+        (
+            Field::new("title", DataType::Utf8, false),
+            Arc::new(StringArray::from(vec!["test"])) as Arc<dyn Array>,
+        ),
+        (
+            Field::new("date", DataType::Timestamp(TimeUnit::Second,Some("+00:00".to_string())), false),
+            Arc::new(TimestampSecondArray::from_vec(vec![datetime!(2022-01-01 12:00:00 UTC).unix_timestamp()],Some("+00:00".to_string()))) as Arc<dyn Array>,
+        ),
+        (
+            Field::new("score", DataType::Float64, false),
+            Arc::new(Float64Array::from(vec![1.123456f64])) as Arc<dyn Array>,
+        ),
+    ]);
+    // build a record batch
+    let batch = RecordBatch::try_new(Arc::new(schema.clone()), vec![Arc::new(metadata)]).unwrap();
+    // serialize it
+    let buffer: Vec<u8> = Vec::new();
+
+    let mut stream_writer = StreamWriter::try_new(buffer, &schema).unwrap();
+    stream_writer.write(&batch).unwrap();
+
+    let serialized_batch = stream_writer.into_inner().unwrap();
+    return serialized_batch;
+}
+
+/// Create example meta-data, ie commands for the module on what to do with the data
+/// A simple commmand structure {command: "test", config: {filename: "test.txt"}}
+/// returns a binary representation of the data in Arrow IPC format
+fn create_arrow_example_meta_data() -> Vec<u8> {
+    // define schema
+    let schema = Schema::new(vec![Field::new(
+        "metadata",
+        DataType::Struct(vec![
+            Field::new("command", DataType::Utf8, false),
+            Field::new(
+                "config",
+                DataType::Struct(vec![Field::new("filename", DataType::Utf8, false)]),
+                false,
+            ),
+        ]),
+        false,
+    )]);
+    // define one data item
+    let metadata = StructArray::from(vec![
+        (
+            Field::new("command", DataType::Utf8, false),
+            Arc::new(StringArray::from(vec!["test"])) as Arc<dyn Array>,
+        ),
+        (
+            Field::new(
+                "config",
+                DataType::Struct(vec![Field::new("filename", DataType::Utf8, false)]),
+                false,
+            ),
+            Arc::new(StructArray::from(vec![(
+                Field::new("filename", DataType::Utf8, false),
+                Arc::new(StringArray::from(vec!["test.txt"])) as Arc<dyn Array>,
+            )])) as Arc<dyn Array>,
+        ),
+    ]);
+    // build a record batch
+    let batch = RecordBatch::try_new(Arc::new(schema.clone()), vec![Arc::new(metadata)]).unwrap();
+    // serialize it
+    let buffer: Vec<u8> = Vec::new();
+
+    let mut stream_writer = StreamWriter::try_new(buffer, &schema).unwrap();
+    stream_writer.write(&batch).unwrap();
+
+    let serialized_batch = stream_writer.into_inner().unwrap();
+    return serialized_batch;
+    /* println!("Serialized length: {}",serialized_batch.len());
+    // print original
+     println!("Printing original");
+     print_batches(&[batch]).unwrap();
+     println!("Reading serialized Arrow");
+     let stream_reader = StreamReader::try_new(serialized_batch.as_slice(), None).unwrap();
+     println!("Metadata of deserialized Arrow IPC data: {}",stream_reader.schema());
+     println!("Printing deserialized Arrow");
+     for item in stream_reader {
+         print_batches(&[item.unwrap()]).unwrap();
+     }*/
 }

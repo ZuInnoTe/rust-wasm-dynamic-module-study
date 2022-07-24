@@ -54,9 +54,10 @@ Please folllow the websites to install it.
 
 # Exchange of data between application and modules
 A crucial part is how the application and the modules exchange data via the shared memory as the WASM component model is currently not standardized. We look at the following aspects:
-* Exchange via C types (via the established C ABI). Usually many programming languages have support for this, but it expects from the developer a lot of "boilerplate" code. 
-* Exchange via Rust types. While other programming languages can read any data, the processing of Rust datatypes in other programming languages
-* Exchange via [Apache Arrow](https://arrow.apache.org/). Apache Arrow is an in-memory analytics format that can be read in many different programming languages and is mostly for tabular data. While this is less useful for standard module integration (functions with different parameters, returning value(s)), it still can be very useful for the case of ZuSearch where different modules need to process data.
+* Exchange via C types (via the established C ABI). Usually many programming languages have support for this, but it expects from the developer a lot of "boilerplate" code. Furthermore, it is slow especially due the frequent (de-)serialization of data when moving data between modules of different programming languages.
+* Exchange via Rust types. While other programming languages can read any data, the processing of Rust datatypes in other programming languages needs dedicated implementations, which do not exist out of the box. Similarly to C types a lot of boilerplate code is required. Furthermore, it is slow especially due the frequent (de-)serialization of data when moving data between modules of different programming languages.
+* Exchange via [Apache Arrow](https://arrow.apache.org/overview/). Apache Arrow is an in-memory analytics format that can be read in many different programming languages and is mostly for tabular data. While this is less useful for standard module integration (functions with different parameters, returning value(s)), it can be very useful for the case of ZuSearch where different modules potentially written in different programming languages need to process data. Additionally, frequent (de-)serialization is not needed, because all programming languages can work directly on the data in Arrow format. In a later stage, ZuSearch may also involve working in a distributed cluster, which could be facilitated by using [arrow-flight](https://arrow.apache.org/blog/2019/10/13/introducing-arrow-flight/). Hence, it is the mechanism of choice when working with different modules.
+ * Note: Rust arrow needs to use to_raw() so other programming language can use the Arrow data
 
 
 # Study
@@ -66,7 +67,7 @@ The study here is a very simple application written in Rust that loads dynamical
   * Covers exchange via C ABI types and Rust ABI types
   * C ABI is with a parameter pointer to a CString in the WASM module memory containing the name. Return is a pointer in the WASM module memory containing the greeting as a CString
   * Rust ABU is with two parameters: A pointer to the Rust String in the WASM module memory containing the name AND the length of the string. Return is a pointer in the WASM module memory containing another pointer and length of the string. Reason is that contrary to C strings, Rust strings are not ended by \0. 
-* [wasm-module2](./wasm-module2/) - an example module that has a functions with two parameters: a pointer to data in Arrow IPC format (a struct containing the key name) and the size of the data (in Arrow IPC format). Return is a pointer n the WASM module memory  containing another to the greeting in Arrow IPC format (a struct containing the key result) and the size of the data (in Arrow IPC format).
+* [wasm-module2](./wasm-module2/) - an example module that has a functions with two parameters: a pointer to data in Arrow IPC format (a struct containing the key name) and the size of the data (in Arrow IPC format). Return is a pointer n the WASM module memory  containing another to the greeting in Arrow IPC format (a struct containing the key result) and the size of the data (in Arrow IPC format). We can implement in Arrow mandatory attributes of a document (e.g. id etc.) and also more flexible dictionaries by having an Array of the struct(key,value), e.g. [{key: "category",value:"news"}]
 
 
 We compile in Rust the module to the target "wasm32-wasi" (see [here](https://doc.rust-lang.org/stable/nightly-rustc/rustc_target/spec/wasm32_wasi/index.html)).
@@ -74,9 +75,21 @@ We compile in Rust the module to the target "wasm32-wasi" (see [here](https://do
 Note: We also link the WASI modules dynamically into the module. However, WASI is still experimental and standardization not finalized. We could also circumwent the use of WASI (e.g. by not relying on std etc.), but since WASI will anyway be needed for the use case of ZuSearch (e.g. file, network accesss as well as corresponding permissions) we included it also in the study.
 
 
+## Flow to exchange data between the application and the modules
+shared memory etc.
+TBD
+```mermaid
+  graph TD;
+      A-->B;
+      A-->C;
+      B-->D;
+      C-->D;
+```
+
 # Observations
 
 * The application cannot be compiled to wasm32-wasi yet (although desired for the future to leverage WASM also in the ZuSearch core), because wasmtime or more specifically WASI does not seem to support this yet.
+* The modules can be compiled to wasm32-wasi and loaded by the application.
 * We use cdylib to create the WASM (but we do not need to use unsafe with WASM) - this is needed because the WASM Interface Type (WIT), ie the WASM component model is not yet fully specified and implemented
 * Including the wasmtime runtime in the application leads to a larger single binary (ca. 14 MB wasmtime 0.38.1 compiled as release). While the size is not very large, it limits the type of embedded device where to deploy it. However, the use case of ZuSearch also does not justify to embedd it on any device (e.g. Arduino would be out of scope).
 * While there is a WASM Component Example (cf. [here](https://github.com/radu-matei/wasm-components-example)) - it only describes static linking at compile time and it is unclear yet if this works at runtime as well.

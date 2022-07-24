@@ -1,30 +1,75 @@
-use std::mem;
 
-/// A hello world function that takes as input an Avro data structure with one key 'name' and a value. Returns an avro structure with the greeting
-/// # Arguments
-/// * `offset` - position of the start of the Rust str
-/// * `length` - length of the Rust str
-/// Returns an offset in the WASM module memory where an offset and length of the result greeting (an avro structure) are stored
-#[no_mangle]
-pub extern "C" fn wasm_memory_avro_format_hello_world(offset: i32, length: i32) -> i32 {
-    // fetch from WASM module memory the Avro data
-    // https://arrow.apache.org/docs/python/ipc.html#ipc
-    // tbd
-    let name_str: &str = "test";
-    // execute the real native function
-    let result_str: String = format_hello_world(&name_str);
-    // put result on WASM module memory
-    // tbd
-    let result_ptr: i32 = 0;
-    // return position of WASM memory where we can find a offset, length pair
-    // the reason is that Rust only support one return value. Although it can be a tuple, this is translated by wasm to one return type and not multi-value
-    return result_ptr;
+use std::cell::Cell;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::mem::ManuallyDrop;
+
+// Global variable to keep track of allocated memory
+// Note: This is really an execption as allocate by the app to the module should have only for parameters
+// Otherwise it would be really bad for performance.
+thread_local!(
+    static memory_areas: RefCell<HashMap<*const u8, (usize, ManuallyDrop<Box<[u8]>>)>> =
+        RefCell::new(HashMap::new());
+);
+
+enum MemoryAreasReturnCode {
+    Success = 0,
+    ErrorMemmoryNotAllocated = -1,
 }
 
-/// The native hello_world function in rust
+/// Allocate some memory for the application to write data for the module
+/// Note: It is up to the application (and not the WASM module) to provide enough pages, so the module does not run out of memory
 /// # Arguments
-/// * `name` - a str containing the name to greet
-/// Returns a string with the greeting
-fn format_hello_world(name: &str) -> String {
-    return format!("Hello World, {name}!");
+/// * `size` - size of memory to allocaten
+/// returns a pointer to the allocated memory area
+#[no_mangle]
+pub extern "C" fn wasm_allocate(size: u32) -> *const u8 {
+    // create a Box with empty memory
+    let alloc_box = ManuallyDrop::new(vec![0u8; size as usize].into_boxed_slice());
+    return allocate(size as usize, alloc_box);
+}
+
+/// Deallocates existing memory for the purpose of the application
+/// # Arguments
+/// * `ptr` - mutuable pointer to the memory to deallocate
+/// returns a code if it was successful or not
+#[no_mangle]
+pub extern "C" fn wasm_deallocate(mut ptr: *const u8) -> i32 {
+    // check if the ptr exists
+    let cell: Cell<Option<(usize, ManuallyDrop<Box<[u8]>>)>> = Cell::new(None);
+    memory_areas.with(|mem_map| cell.set(mem_map.borrow_mut().remove(&ptr)));
+    let memory_area: Option<(usize, ManuallyDrop<Box<[u8]>>)> = cell.into_inner();
+    match memory_area {
+        Some(x) => ManuallyDrop::into_inner(x.1), // will then be deleted after function returns
+        None => return MemoryAreasReturnCode::ErrorMemmoryNotAllocated as i32,
+    };
+    // return success
+    return MemoryAreasReturnCode::Success as i32;
+}
+
+
+/// Validates if a pointer has been properly allocated in this module
+/// # Arguments
+/// * `ptr` - pointer
+/// returns the size of the allocated memory area. It is 0 if the pointer is invalid
+pub fn validate_pointer(ptr: *const u8) -> usize {
+    let cell: Cell<usize> = Cell::new(0);
+    memory_areas.with(|mem_map| match mem_map.borrow().get(&ptr) {
+        Some(x) => cell.set(x.0),
+        None => cell.set(0),
+    });
+    return cell.get();
+}
+
+/// Allocate some memory for the application to write data for the module
+/// Note: It is up to the application (and not the WASM module) to provide enough pages, so the module does not run out of memory
+/// This function can also be used internally by the WASM module to return data to the calling application of the module
+/// # Arguments
+/// * `size` - size of memory to allocaten
+/// returns a pointer to the allocated memory area
+pub fn allocate(size: usize, alloc_box: ManuallyDrop<Box<[u8]>>) -> *const u8 {
+    let result_ptr: *const u8 = alloc_box.as_ptr();
+    // save allocated memory to avoid it is cleaned up after function exits
+    memory_areas.with(|mem_map| mem_map.borrow_mut().insert(result_ptr, (size, alloc_box)));
+    return result_ptr;
 }
