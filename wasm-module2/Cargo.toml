@@ -9,4 +9,5 @@ edition = "2021"
 crate-type = ['cdylib']
 
 [dependencies]
-arrow = { version = "18.0.0", default-features = false, features = ["ipc"] }
+arrow = { version = "18.0.0", default-features = false, features = ["ipc","prettyprint"] }
+time = {version = "0.3.11", features = ["macros"]}

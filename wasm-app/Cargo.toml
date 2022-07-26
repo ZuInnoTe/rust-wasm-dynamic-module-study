@@ -9,5 +9,5 @@ edition = "2021"
 anyhow = {version = "1.0.58"}
 arrow = { version = "18.0.0", default-features = false, features = ["ipc","prettyprint"] }
 time = {version = "0.3.11", features = ["macros"]}
-wasmtime = { version = "0.38.1"}
-wasmtime-wasi = { version = "0.38.1"}
+wasmtime = { version = "0.39.1"}
+wasmtime-wasi = { version = "0.39.1"}

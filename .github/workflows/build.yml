@@ -36,7 +36,10 @@ jobs:
      - name: Build Rust Wasm Study
        run: | 
           cd wasm-module1
-          cargo build --target wasm32-wasi
+          cargo build --release --target wasm32-wasi
+          cd ..
+          cd wasm-module2
+          cargo build --release --target wasm32-wasi
           cd ..
           cd wasm-app
           cargo build

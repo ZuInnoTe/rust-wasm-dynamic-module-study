@@ -123,7 +123,7 @@ pub extern "C" fn wasm_memory_rust_format_hello_world(offset: *mut u32, length: 
     // return position of WASM memory where we can find a offset, length pair
     let string_ptr = allocate(result_string_len, allocated_result_string);
     let length = result_string_len;
-    // preparre metadata
+    // prepare metadata
     let mut vec_meta: Vec<u8> = Vec::new();
     let string_ptr_array: [u8; (usize::BITS / 8) as usize] = (string_ptr as usize).to_le_bytes();
     let length_array: [u8; (usize::BITS / 8) as usize] = result_string_len.to_le_bytes();

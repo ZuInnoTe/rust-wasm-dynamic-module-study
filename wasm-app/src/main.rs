@@ -13,15 +13,17 @@ use std::ffi::CString;
 use std::io::Cursor;
 use std::sync::Arc;
 
-use arrow::array::{Array, Float64Array, TimestampSecondArray, StringArray, StructArray,UInt64Array};
-use arrow::datatypes::{DataType, Field, Schema,TimeUnit};
+use arrow::array::{
+    Array, Float64Array, StringArray, StructArray, TimestampSecondArray, UInt64Array,
+};
+use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use arrow::error;
 use arrow::ipc::reader::StreamReader;
 use arrow::ipc::writer::StreamWriter;
 use arrow::record_batch::RecordBatch;
 use arrow::util::pretty::print_batches;
 
-use time::{macros::datetime};
+use time::macros::datetime;
 
 struct MyState {
     wasi: WasiCtx,
@@ -52,10 +54,9 @@ fn main() {
         result_rust_format_hello_world
     );
     println!("Loading WASM module 2...");
-    let module: Module = init_wasm_module_1(&engine).unwrap();
+    let module: Module = init_wasm_module_2(&engine).unwrap();
     println!("Module 2: Running WASM function arrow_process_document...");
-    create_arrow_example_data();
-    create_arrow_example_meta_data();
+    let result_process_data_arrow = wrapper_wasm_process_data_arrow(&engine, &module).unwrap();
 }
 
 /// Init the WASM Engine
@@ -80,7 +81,6 @@ fn init_wasm_module_1(engine: &Engine) -> anyhow::Result<Module> {
     Ok(module)
 }
 
-
 /// Initialize WASM module 2
 /// # Arguments
 /// * `engine` - wasmtime engine to use for the store
@@ -90,11 +90,10 @@ fn init_wasm_module_2(engine: &Engine) -> anyhow::Result<Module> {
     // load WASM module
     let module = Module::from_file(
         &engine,
-        "../../../wasm-module2/target/wasm32-wasi/debug/wasm_module2.wasm",
+        "../../../wasm-module2/target/wasm32-wasi/release/wasm_module2.wasm",
     )?;
     Ok(module)
 }
-
 
 /// Wrapper around the function answer of the WASM Module. This is needed as the standardization of the componennt model and webassembly interface types is still work-in-progress
 /// # Arguments (note the function `answer` of the WASM module itself has no parameters. The parameters are just to initialize the runtime environment)
@@ -184,45 +183,49 @@ fn wrapper_wasm_c_format_hello_world(
     );
     // call function answer
     let result_offset = func_validated.call(&mut store, offset)?;
-    let mut result_offset_position = result_offset;
-    // read answer
-    let mut buffer = [1u8; 1];
-    let mut result_v_u8: Vec<u8> = Vec::new();
-    while buffer[0] != 0u8 {
-        memory.read(
-            &store,
-            result_offset_position.try_into().unwrap(),
-            &mut buffer,
-        )?;
-        result_v_u8.push(buffer[0]);
-        result_offset_position += 1;
+    if result_offset == 0 {
+        anyhow::bail!("Error: No valid answer received from function")
+    } else {
+        let mut result_offset_position = result_offset;
+        // read answer
+        let mut buffer = [1u8; 1];
+        let mut result_v_u8: Vec<u8> = Vec::new();
+        while buffer[0] != 0u8 {
+            memory.read(
+                &store,
+                result_offset_position.try_into().unwrap(),
+                &mut buffer,
+            )?;
+            result_v_u8.push(buffer[0]);
+            result_offset_position += 1;
+        }
+        // deallocate shared WASM Module memory
+        let dealloc_param_code: i32 =
+            wrapper_wasm_deallocate(engine, module, instance, &mut store, offset as *const u8)
+                .unwrap();
+        if dealloc_param_code != 0 {
+            println!("Error: Could not deallocate shared WASM module memory for parameter");
+        }
+        let dealloc_return_code: i32 = wrapper_wasm_deallocate(
+            engine,
+            module,
+            instance,
+            &mut store,
+            result_offset as *const u8,
+        )
+        .unwrap();
+        if dealloc_return_code != 0 {
+            println!("Error: Could not deallocate shared WASM module memory for result");
+        }
+        // convert answer
+        let c_str: &CStr = unsafe { CStr::from_ptr(result_v_u8.as_ptr() as *const i8) };
+        let result_str: &str = c_str.to_str().unwrap();
+        Ok(result_str.to_string())
     }
-    // deallocate shared WASM Module memory
-    let dealloc_param_code: i32 =
-        wrapper_wasm_deallocate(engine, module, instance, &mut store, offset as *const u8).unwrap();
-    if dealloc_param_code != 0 {
-        println!("Error: Could not deallocate shared WASM module memory for parameter");
-    }
-    let dealloc_return_code: i32 = wrapper_wasm_deallocate(
-        engine,
-        module,
-        instance,
-        &mut store,
-        result_offset as *const u8,
-    )
-    .unwrap();
-    if dealloc_return_code != 0 {
-        println!("Error: Could not deallocate shared WASM module memory for result");
-    }
-    // convert answer
-    let c_str: &CStr = unsafe { CStr::from_ptr(result_v_u8.as_ptr() as *const i8) };
-    let result_str: &str = c_str.to_str().unwrap();
-
-    Ok(result_str.to_string())
 }
 
-/// Wrapper around the function format_hello_world (Rust ABI) of the WASM Module. This is needed as the standardization of the componennt model and webassembly interface types is still work-in-progress
-/// # Arguments (note the function `format_hello_world` of the WASM module itself has just one parameter: `func_name`. The pther parameters are just to initialize the runtime environment)
+/// Wrapper around the function format_hello_world (Rust ABI) of the WASM Module. This is needed as the standardization of the component model and webassembly interface types is still work-in-progress
+/// # Arguments (note the function `format_hello_world` of the WASM module itself has just one parameter: `func_name`. The other parameters are just to initialize the runtime environment)
 /// * `engine` - wasmtime engine to use for the store
 /// * `module` - module containing the WASM function
 /// * `func_name` - Parameter `name` for the function
@@ -276,63 +279,230 @@ fn wrapper_wasm_rust_format_hello_world(
     );
     // call function answer
     let result_offset = func_validated.call(&mut store, (offset, length))?;
-    let mut result_offset_position = result_offset;
-    // read answer from memory: these are two values: offset and length of the return string
-    // read metadata (offset and length of the sring)
-    // note: WebAssembly is by default 32 bit
-    let mut ptr_buffer = [0u8; (u32::BITS / 8) as usize];
-    let mut len_buffer = [0u8; (u32::BITS / 8) as usize];
-    memory.read(
-        &store,
-        result_offset_position.try_into().unwrap(),
-        &mut ptr_buffer,
-    )?;
-    result_offset_position += (u32::BITS / 8) as u32;
-    memory.read(
-        &store,
-        result_offset_position.try_into().unwrap(),
-        &mut len_buffer,
-    )?;
-    let result_ptr = u32::from_le_bytes(ptr_buffer);
-    let result_len = u32::from_le_bytes(len_buffer);
-    // read the string
-    let mut result_vec: Vec<u8> = vec![0; result_len as usize];
-    let mut result_str_buffer = result_vec.as_mut_slice();
-    memory.read(
-        &store,
-        result_ptr.try_into().unwrap(),
-        &mut result_str_buffer,
-    )?;
-    // deallocate shared WASM Module memory
-    let dealloc_param_code: i32 =
-        wrapper_wasm_deallocate(engine, module, instance, &mut store, offset as *const u8).unwrap();
-    if dealloc_param_code != 0 {
-        println!("Error: Could not deallocate shared WASM module memory for parameter");
+    if result_offset == 0 {
+        anyhow::bail!("Error: No valid answer received from function")
+    } else {
+        let mut result_offset_position = result_offset;
+        // read answer from memory: these are two values: offset and length of the return string
+        // read metadata (offset and length of the sring)
+        // note: WebAssembly is by default 32 bit
+        let mut ptr_buffer = [0u8; (u32::BITS / 8) as usize];
+        let mut len_buffer = [0u8; (u32::BITS / 8) as usize];
+        memory.read(
+            &store,
+            result_offset_position.try_into().unwrap(),
+            &mut ptr_buffer,
+        )?;
+        result_offset_position += (u32::BITS / 8) as u32;
+        memory.read(
+            &store,
+            result_offset_position.try_into().unwrap(),
+            &mut len_buffer,
+        )?;
+        let result_ptr = u32::from_le_bytes(ptr_buffer);
+        let result_len = u32::from_le_bytes(len_buffer);
+        // read the string
+        let mut result_vec: Vec<u8> = vec![0; result_len as usize];
+        let mut result_str_buffer = result_vec.as_mut_slice();
+        memory.read(
+            &store,
+            result_ptr.try_into().unwrap(),
+            &mut result_str_buffer,
+        )?;
+        // deallocate shared WASM Module memory
+        let dealloc_param_code: i32 =
+            wrapper_wasm_deallocate(engine, module, instance, &mut store, offset as *const u8)
+                .unwrap();
+        if dealloc_param_code != 0 {
+            println!("Error: Could not deallocate shared WASM module memory for parameter");
+        }
+        let dealloc_return__meta_code: i32 = wrapper_wasm_deallocate(
+            engine,
+            module,
+            instance,
+            &mut store,
+            result_offset as *const u8,
+        )
+        .unwrap();
+        if dealloc_return__meta_code != 0 {
+            println!("Error: Could not deallocate shared WASM module memory for return metadata");
+        }
+        let dealloc_return_data_code: i32 = wrapper_wasm_deallocate(
+            engine,
+            module,
+            instance,
+            &mut store,
+            result_ptr as *const u8,
+        )
+        .unwrap();
+        if dealloc_return_data_code != 0 {
+            println!("Error: Could not deallocate shared WASM module memory for return data");
+        }
+        let result_str: String =
+            unsafe { String::from_utf8_lossy(&result_str_buffer).into_owned() };
+        Ok(result_str.to_string())
     }
-    let dealloc_return__meta_code: i32 = wrapper_wasm_deallocate(
-        engine,
-        module,
+}
+
+/// Wrapper around the function process_data_arrow (Use Arrow for cross-programming language data serialization) of the WASM Module.
+/// # Arguments (note the function `process_data_arrow` of the WASM module itself expects to have the Arrow data exchanged in the module memory. The Arrow data is generated in this application through the functions create_arrow_example_meta_data (instructing the function what to do with the data) and create_arrow_example_data (containing the data to be processed)
+/// * `engine` - wasmtime engine to use for the store
+/// * `module` - module containing the WASM function
+/// returns the result of the function `format_hello_world`
+fn wrapper_wasm_process_data_arrow(engine: &Engine, module: &Module) -> anyhow::Result<String> {
+    // Load function an instantiate it
+    let mut linker = Linker::new(&engine);
+    wasmtime_wasi::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
+    // store to exchange data with the WASM module
+    let wasi = WasiCtxBuilder::new()
+        .inherit_stdio()
+        .inherit_args()?
+        .build();
+    let mut store = Store::new(&engine, MyState { wasi: wasi });
+    // instantiate module
+    // let instance = Instance::new(&mut store, &module, &[])?;
+    linker.module(&mut store, "", &module)?;
+    let instance: Instance = linker.instantiate(&mut store, &module).unwrap();
+    // get the function
+    let func_def = instance
+        .get_func(&mut store, "wasm_memory_process_data_arrow")
+        .expect("`wasm_memory_process_data_arrow` was not an exported function");
+    // validate that it corresponds to the parameters and return types we need
+    let func_validated = func_def.typed::<(u32, u32, u32, u32), u32, _>(&store)?;
+
+    // prepare handing Arrow data
+    let serialized_meta_data = create_arrow_example_meta_data();
+    let serialized_meta_data_size = serialized_meta_data.len();
+    let serialized_data = create_arrow_example_data();
+    let serialized_data_size = serialized_data.len();
+
+    // instantiate memory
+    let memory = instance
+        .get_memory(&mut store, "memory")
+        .ok_or(anyhow::format_err!("failed to find `memory` export"))?;
+
+    // allocate some memory within the WASM module for metadata
+    let offset_meta_data: u32 = wrapper_wasm_allocate(
+        &engine,
+        &module,
         instance,
         &mut store,
-        result_offset as *const u8,
+        serialized_meta_data_size as u32,
     )
-    .unwrap();
-    if dealloc_return__meta_code != 0 {
-        println!("Error: Could not deallocate shared WASM module memory for return metadata");
-    }
-    let dealloc_return_data_code: i32 = wrapper_wasm_deallocate(
-        engine,
-        module,
+    .unwrap() as u32;
+    memory.write(
+        &mut store,
+        offset_meta_data.try_into().unwrap(),
+        serialized_meta_data.as_slice(),
+    );
+    // allocate some memory within the WASM module for data
+    let offset_data: u32 = wrapper_wasm_allocate(
+        &engine,
+        &module,
         instance,
         &mut store,
-        result_ptr as *const u8,
+        serialized_data_size as u32,
     )
-    .unwrap();
-    if dealloc_return_data_code != 0 {
-        println!("Error: Could not deallocate shared WASM module memory for return data");
+    .unwrap() as u32;
+    memory.write(
+        &mut store,
+        offset_data.try_into().unwrap(),
+        serialized_data.as_slice(),
+    );
+    // call function answer
+    let result_offset = func_validated.call(
+        &mut store,
+        (
+            offset_meta_data,
+            serialized_meta_data_size as u32,
+            offset_data,
+            serialized_data_size as u32,
+        ),
+    )?;
+    if result_offset == 0 {
+        anyhow::bail!("Error: No valid answer received from function")
+    } else {
+        let mut result_offset_position = result_offset;
+        // read answer from memory: these are two values: offset of the processed data and size of the processed data in Arrow IPC format
+        // read metadata (offset and size of the Arrow IPC data)
+        // note: WebAssembly is by default 32 bit
+        let mut ptr_buffer = [0u8; (u32::BITS / 8) as usize];
+        let mut len_buffer = [0u8; (u32::BITS / 8) as usize];
+        memory.read(
+            &store,
+            result_offset_position.try_into().unwrap(),
+            &mut ptr_buffer,
+        )?;
+        result_offset_position += (u32::BITS / 8) as u32;
+        memory.read(
+            &store,
+            result_offset_position.try_into().unwrap(),
+            &mut len_buffer,
+        )?;
+        let result_ptr = u32::from_le_bytes(ptr_buffer);
+        let result_len = u32::from_le_bytes(len_buffer);
+        // read the Arrow IPC data
+        let mut result_arrow_ipc: Vec<u8> = vec![0; result_len as usize];
+        let mut result_arrow_ipc_buffer = result_arrow_ipc.as_mut_slice();
+        memory.read(
+            &store,
+            result_ptr.try_into().unwrap(),
+            &mut result_arrow_ipc_buffer,
+        )?;
+        // deallocate shared WASM Module memory
+        let dealloc_meta_data_code: i32 = wrapper_wasm_deallocate(
+            engine,
+            module,
+            instance,
+            &mut store,
+            offset_meta_data as *const u8,
+        )
+        .unwrap();
+        if dealloc_meta_data_code != 0 {
+            println!("Error: Could not deallocate shared WASM module memory for meta data");
+        }
+        let dealloc_data_code: i32 = wrapper_wasm_deallocate(
+            engine,
+            module,
+            instance,
+            &mut store,
+            offset_data as *const u8,
+        )
+        .unwrap();
+        if dealloc_data_code != 0 {
+            println!("Error: Could not deallocate shared WASM module memory for data");
+        }
+        let dealloc_return_meta_code: i32 = wrapper_wasm_deallocate(
+            engine,
+            module,
+            instance,
+            &mut store,
+            result_offset as *const u8,
+        )
+        .unwrap();
+        if dealloc_return_meta_code != 0 {
+            println!("Error: Could not deallocate shared WASM module memory for return metadata");
+        }
+        let dealloc_return_data_code: i32 = wrapper_wasm_deallocate(
+            engine,
+            module,
+            instance,
+            &mut store,
+            result_ptr as *const u8,
+        )
+        .unwrap();
+        if dealloc_return_data_code != 0 {
+            println!("Error: Could not deallocate shared WASM module memory for return data");
+        }
+        // check correctness of returned Arrow IPC data
+        println!("Displaying Arrow answer from Module");
+        let stream_reader = StreamReader::try_new(result_arrow_ipc.as_slice(), None).unwrap();
+
+        for item in stream_reader {
+            print_batches(&[item.unwrap()]).unwrap();
+        }
+        Ok("".to_string())
     }
-    let result_str: String = unsafe { String::from_utf8_lossy(&result_str_buffer).into_owned() };
-    Ok(result_str.to_string())
 }
 
 /// Wrapper around the allocate function of the WASM module to allocate shared WASM memory. Allocate some memory for the application to write data for the module
@@ -387,43 +557,38 @@ fn wrapper_wasm_deallocate(
 /// returns a binary representation of the data in Arrow IPC format
 fn create_arrow_example_data() -> Vec<u8> {
     // define schema
-    let schema = Schema::new(vec![Field::new(
-        "metadata",
-        DataType::Struct(vec![
-
-            Field::new("id", DataType::UInt64, false),
-            Field::new("content", DataType::Utf8, false),
-            Field::new("title", DataType::Utf8, false),
-            Field::new("date", DataType::Timestamp(TimeUnit::Second,Some("+00:00".to_string())), false),
-            Field::new("score", DataType::Float64, false),
-        ]),
-        false,
-    )]);
-    // define one data item
-    let metadata = StructArray::from(vec![
-        (
-            Field::new("id", DataType::UInt64, false),
-            Arc::new(UInt64Array::from(vec![1])) as Arc<dyn Array>,
+    let schema = Schema::new(vec![
+        Field::new("id", DataType::UInt64, false),
+        Field::new("content", DataType::Utf8, false),
+        Field::new("title", DataType::Utf8, false),
+        Field::new(
+            "date",
+            DataType::Timestamp(TimeUnit::Second, Some("+00:00".to_string())),
+            false,
         ),
-        (
-            Field::new("content", DataType::Utf8, false),
-            Arc::new(StringArray::from(vec!["this is a test"])) as Arc<dyn Array>,
-        ),      
-        (
-            Field::new("title", DataType::Utf8, false),
-            Arc::new(StringArray::from(vec!["test"])) as Arc<dyn Array>,
-        ),
-        (
-            Field::new("date", DataType::Timestamp(TimeUnit::Second,Some("+00:00".to_string())), false),
-            Arc::new(TimestampSecondArray::from_vec(vec![datetime!(2022-01-01 12:00:00 UTC).unix_timestamp()],Some("+00:00".to_string()))) as Arc<dyn Array>,
-        ),
-        (
-            Field::new("score", DataType::Float64, false),
-            Arc::new(Float64Array::from(vec![1.123456f64])) as Arc<dyn Array>,
-        ),
+        Field::new("score", DataType::Float64, false),
     ]);
+    let ids = UInt64Array::from(vec![1]);
+    let contents = StringArray::from(vec!["this is a test"]);
+    let titles = StringArray::from(vec!["test"]);
+    let dates = TimestampSecondArray::from_vec(
+        vec![datetime!(2022-01-01 12:00:00 UTC).unix_timestamp()],
+        Some("+00:00".to_string()),
+    );
+    let scores = Float64Array::from(vec![1.123456f64]);
+
     // build a record batch
-    let batch = RecordBatch::try_new(Arc::new(schema.clone()), vec![Arc::new(metadata)]).unwrap();
+    let batch = RecordBatch::try_new(
+        Arc::new(schema.clone()),
+        vec![
+            Arc::new(ids),
+            Arc::new(contents),
+            Arc::new(titles),
+            Arc::new(dates),
+            Arc::new(scores),
+        ],
+    )
+    .unwrap();
     // serialize it
     let buffer: Vec<u8> = Vec::new();
 
@@ -439,38 +604,27 @@ fn create_arrow_example_data() -> Vec<u8> {
 /// returns a binary representation of the data in Arrow IPC format
 fn create_arrow_example_meta_data() -> Vec<u8> {
     // define schema
-    let schema = Schema::new(vec![Field::new(
-        "metadata",
-        DataType::Struct(vec![
-            Field::new("command", DataType::Utf8, false),
-            Field::new(
-                "config",
-                DataType::Struct(vec![Field::new("filename", DataType::Utf8, false)]),
-                false,
-            ),
-        ]),
-        false,
-    )]);
-    // define one data item
-    let metadata = StructArray::from(vec![
-        (
-            Field::new("command", DataType::Utf8, false),
-            Arc::new(StringArray::from(vec!["test"])) as Arc<dyn Array>,
-        ),
-        (
-            Field::new(
-                "config",
-                DataType::Struct(vec![Field::new("filename", DataType::Utf8, false)]),
-                false,
-            ),
-            Arc::new(StructArray::from(vec![(
-                Field::new("filename", DataType::Utf8, false),
-                Arc::new(StringArray::from(vec!["test.txt"])) as Arc<dyn Array>,
-            )])) as Arc<dyn Array>,
+    let schema = Schema::new(vec![
+        Field::new("command", DataType::Utf8, false),
+        Field::new(
+            "config",
+            DataType::Struct(vec![Field::new("filename", DataType::Utf8, false)]),
+            false,
         ),
     ]);
+    // define one data item
+    let command = StringArray::from(vec!["test"]);
+
+    let config = StructArray::from(vec![(
+        Field::new("filename", DataType::Utf8, false),
+        Arc::new(StringArray::from(vec!["test.txt"])) as Arc<dyn Array>,
+    )]);
     // build a record batch
-    let batch = RecordBatch::try_new(Arc::new(schema.clone()), vec![Arc::new(metadata)]).unwrap();
+    let batch = RecordBatch::try_new(
+        Arc::new(schema.clone()),
+        vec![Arc::new(command), Arc::new(config)],
+    )
+    .unwrap();
     // serialize it
     let buffer: Vec<u8> = Vec::new();
 
@@ -479,15 +633,4 @@ fn create_arrow_example_meta_data() -> Vec<u8> {
 
     let serialized_batch = stream_writer.into_inner().unwrap();
     return serialized_batch;
-    /* println!("Serialized length: {}",serialized_batch.len());
-    // print original
-     println!("Printing original");
-     print_batches(&[batch]).unwrap();
-     println!("Reading serialized Arrow");
-     let stream_reader = StreamReader::try_new(serialized_batch.as_slice(), None).unwrap();
-     println!("Metadata of deserialized Arrow IPC data: {}",stream_reader.schema());
-     println!("Printing deserialized Arrow");
-     for item in stream_reader {
-         print_batches(&[item.unwrap()]).unwrap();
-     }*/
 }
