@@ -4,17 +4,13 @@ use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
-use arrow::array::{
-    Array, Float64Array, StringArray, StructArray, TimestampSecondArray, UInt64Array,
-};
+use arrow::array::{StringArray, UInt64Array};
 use arrow::datatypes::{
     DataType, Field, Float64Type, Schema, TimeUnit, TimestampSecondType, UInt64Type,
 };
-use arrow::error;
 use arrow::ipc::reader::StreamReader;
 use arrow::ipc::writer::StreamWriter;
 use arrow::record_batch::RecordBatch;
-use arrow::util::pretty::print_batches;
 
 use time::macros::datetime;
 
@@ -22,7 +18,7 @@ use time::macros::datetime;
 // Note: This is really an execption as allocate by the app to the module should have only for parameters
 // Otherwise it would be really bad for performance.
 thread_local!(
-    static memory_areas: RefCell<HashMap<*const u8, (usize, ManuallyDrop<Box<[u8]>>)>> =
+    static MEMORY_AREAS: RefCell<HashMap<*const u8, (usize, ManuallyDrop<Box<[u8]>>)>> =
         RefCell::new(HashMap::new());
 );
 
@@ -48,10 +44,10 @@ pub extern "C" fn wasm_allocate(size: u32) -> *const u8 {
 /// * `ptr` - mutuable pointer to the memory to deallocate
 /// returns a code if it was successful or not
 #[no_mangle]
-pub extern "C" fn wasm_deallocate(mut ptr: *const u8) -> i32 {
+pub extern "C" fn wasm_deallocate(ptr: *const u8) -> i32 {
     // check if the ptr exists
     let cell: Cell<Option<(usize, ManuallyDrop<Box<[u8]>>)>> = Cell::new(None);
-    memory_areas.with(|mem_map| cell.set(mem_map.borrow_mut().remove(&ptr)));
+    MEMORY_AREAS.with(|mem_map| cell.set(mem_map.borrow_mut().remove(&ptr)));
     let memory_area: Option<(usize, ManuallyDrop<Box<[u8]>>)> = cell.into_inner();
     match memory_area {
         Some(x) => ManuallyDrop::into_inner(x.1), // will then be deleted after function returns
@@ -107,24 +103,26 @@ pub extern "C" fn wasm_memory_process_data_arrow(
         StreamReader::try_new(input_vec_meta_data.as_slice(), None).unwrap();
     // check if the meta data content is as expected (ie hardcoded in app)
     for item in stream_reader_meta_data {
-        let arrowRecordBatch = item.unwrap();
+        let arrow_record_batch = item.unwrap();
         // validate schema
-        assert_eq!(arrowRecordBatch.schema().field(0).name(), "command");
+        assert_eq!(arrow_record_batch.schema().field(0).name(), "command");
         assert_eq!(
-            arrowRecordBatch.schema().field(0).data_type(),
+            arrow_record_batch.schema().field(0).data_type(),
             &DataType::Utf8
         );
-        assert_eq!(arrowRecordBatch.schema().field(1).name(), "config");
+        assert_eq!(arrow_record_batch.schema().field(1).name(), "config");
         assert_eq!(
-            arrowRecordBatch.schema().field(1).data_type(),
+            arrow_record_batch.schema().field(1).data_type(),
             &DataType::Struct(vec![Field::new("filename", DataType::Utf8, false)])
         );
 
         // validate meta_data
-        assert_eq!(arrowRecordBatch.num_rows(), 1);
-        let first_row_command = arrow::array::as_string_array(arrowRecordBatch.column(0)).value(0);
+        assert_eq!(arrow_record_batch.num_rows(), 1);
+        let first_row_command =
+            arrow::array::as_string_array(arrow_record_batch.column(0)).value(0);
         assert_eq!(first_row_command, "test");
-        let first_row_config = arrow::array::as_struct_array(arrowRecordBatch.column(1)).column(0);
+        let first_row_config =
+            arrow::array::as_struct_array(arrow_record_batch.column(1)).column(0);
         let first_row_config_filename = arrow::array::as_string_array(first_row_config).value(0);
         assert_eq!(first_row_config_filename, "test.txt");
     }
@@ -133,51 +131,52 @@ pub extern "C" fn wasm_memory_process_data_arrow(
     let stream_reader_data = StreamReader::try_new(input_vec_data.as_slice(), None).unwrap();
     // check if the  data content is as expected (ie hardcoded in app)
     for item in stream_reader_data {
-        let arrowRecordBatch = item.unwrap();
+        let arrow_record_batch = item.unwrap();
         // validate schema
-        assert_eq!(arrowRecordBatch.schema().field(0).name(), "id");
+        assert_eq!(arrow_record_batch.schema().field(0).name(), "id");
         assert_eq!(
-            arrowRecordBatch.schema().field(0).data_type(),
+            arrow_record_batch.schema().field(0).data_type(),
             &DataType::UInt64
         );
-        assert_eq!(arrowRecordBatch.schema().field(1).name(), "content");
+        assert_eq!(arrow_record_batch.schema().field(1).name(), "content");
         assert_eq!(
-            arrowRecordBatch.schema().field(1).data_type(),
+            arrow_record_batch.schema().field(1).data_type(),
             &DataType::Utf8
         );
-        assert_eq!(arrowRecordBatch.schema().field(2).name(), "title");
+        assert_eq!(arrow_record_batch.schema().field(2).name(), "title");
         assert_eq!(
-            arrowRecordBatch.schema().field(2).data_type(),
+            arrow_record_batch.schema().field(2).data_type(),
             &DataType::Utf8
         );
-        assert_eq!(arrowRecordBatch.schema().field(3).name(), "date");
+        assert_eq!(arrow_record_batch.schema().field(3).name(), "date");
         assert_eq!(
-            arrowRecordBatch.schema().field(3).data_type(),
+            arrow_record_batch.schema().field(3).data_type(),
             &DataType::Timestamp(TimeUnit::Second, Some("+00:00".to_string()))
         );
-        assert_eq!(arrowRecordBatch.schema().field(4).name(), "score");
+        assert_eq!(arrow_record_batch.schema().field(4).name(), "score");
         assert_eq!(
-            arrowRecordBatch.schema().field(4).data_type(),
+            arrow_record_batch.schema().field(4).data_type(),
             &DataType::Float64
         );
         // validate data
-        assert_eq!(arrowRecordBatch.num_rows(), 1);
+        assert_eq!(arrow_record_batch.num_rows(), 1);
         let first_row_id =
-            arrow::array::as_primitive_array::<UInt64Type>(arrowRecordBatch.column(0)).value(0);
+            arrow::array::as_primitive_array::<UInt64Type>(arrow_record_batch.column(0)).value(0);
         assert_eq!(first_row_id, 1);
-        let first_row_content = arrow::array::as_string_array(arrowRecordBatch.column(1)).value(0);
+        let first_row_content =
+            arrow::array::as_string_array(arrow_record_batch.column(1)).value(0);
         assert_eq!(first_row_content, "this is a test");
-        let first_row_title = arrow::array::as_string_array(arrowRecordBatch.column(2)).value(0);
+        let first_row_title = arrow::array::as_string_array(arrow_record_batch.column(2)).value(0);
         assert_eq!(first_row_title, "test");
         let first_row_date =
-            arrow::array::as_primitive_array::<TimestampSecondType>(arrowRecordBatch.column(3))
+            arrow::array::as_primitive_array::<TimestampSecondType>(arrow_record_batch.column(3))
                 .value(0);
         assert_eq!(
             first_row_date,
             datetime!(2022-01-01 12:00:00 UTC).unix_timestamp()
         );
         let first_row_score =
-            arrow::array::as_primitive_array::<Float64Type>(arrowRecordBatch.column(4)).value(0);
+            arrow::array::as_primitive_array::<Float64Type>(arrow_record_batch.column(4)).value(0);
         assert_eq!(first_row_score, 1.123456f64);
     }
     // lets generate a return answer to the processing request modifying the field content of document with id 1
@@ -239,7 +238,7 @@ pub extern "C" fn wasm_memory_process_data_arrow(
 /// returns the size of the allocated memory area. It is 0 if the pointer is invalid
 pub fn validate_pointer(ptr: *const u8) -> usize {
     let cell: Cell<usize> = Cell::new(0);
-    memory_areas.with(|mem_map| match mem_map.borrow().get(&ptr) {
+    MEMORY_AREAS.with(|mem_map| match mem_map.borrow().get(&ptr) {
         Some(x) => cell.set(x.0),
         None => cell.set(0),
     });
@@ -255,6 +254,6 @@ pub fn validate_pointer(ptr: *const u8) -> usize {
 pub fn allocate(size: usize, alloc_box: ManuallyDrop<Box<[u8]>>) -> *const u8 {
     let result_ptr: *const u8 = alloc_box.as_ptr();
     // save allocated memory to avoid it is cleaned up after function exits
-    memory_areas.with(|mem_map| mem_map.borrow_mut().insert(result_ptr, (size, alloc_box)));
+    MEMORY_AREAS.with(|mem_map| mem_map.borrow_mut().insert(result_ptr, (size, alloc_box)));
     return result_ptr;
 }

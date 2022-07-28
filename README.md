@@ -1,7 +1,7 @@
 # Introduction
 State: 16.07.2022
 
-**NOTE: THIS EXAMPLE USES FEATURES WORK-IN-PROGRESS AND DOES NOT INCORPORATE NECESSARY SAFETY MECHANISMS - DO NOT USE FOR PRODUCTION APPLICATIONS**
+**NOTE: THIS EXAMPLE IS FOR DEMONSTRATION ONLY - DO NOT USE FOR PRODUCTION APPLICATIONS**
 
 This is a small example to use Rust for an application with target wasm32-wasi to load dynamically another application module targetting wasm32-wasi. This target enables compilation to [Webassembly](https://webassembly.org/) (WASM). Originally WASM was a framework for secure near-native speed browser applications, it has been extended in the past to serve the needs of all types of cross-platform secure native applications, such as server-based or serverless ones. See also this [blog post](https://zuinnote.eu/blog/?p=1567) to find out more on the WASM ecosystem.
 
@@ -27,7 +27,7 @@ The code is available under:
 This is just a brief overview on the potential technology choices - it is not complete (raise an issue if you think some consideration is missing!). I will link later a more detailed justification. The following choices were there:
 * Use Rust dylib: Precise interfaces are possible, but the future/current state of dylib is [rather unclear](https://rust-lang.github.io/rfcs/1510-cdylib.html) - I found hardly any application (beyond examples) that use it (for this reason). Furthermore, there is no standardized Rust Appplication Binary Interface (ABI) (see [here](https://github.com/slightknack/rust-abi-wiki) for a Wiki summarizing the issues) - this means there is no support for other languages. Additionally, even within Rust it can leads to incompatibilities in different Rust versions. Cross-platform is possible, but one has to create dedicated binaries for each platform making it more complicated to ensure all modules for a given installation belong to the same platform, one has to ask module providers to compile for different target etc. Since multiple platforms (e.g. x86_64, arm64, specific processors for embedded etc.) are nowadays the reality, this is challenging. 
 * Use [Rust cdylib](https://doc.rust-lang.org/nomicon/ffi.html): This is the most common way to load dynamic libraries. Libraries can be loaded through the well-established C ABI (there is NO standard for the C ABI - it somehow evolved over years to sth. standard like due to adaption), which is supported in virtually any programming language. Cross-platform is possible, but with the same issues as for Rust dylib. One major issue is that one has to use [Rust unsafe](https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html) calls for any call to a module function. This makes the advantages of Rust for memory safety and management for a highly modular application with a lot of dynamic modules less useful up to useless to certain cases even if all modules would be written in Rust.
-* Use [WebAssembly](https://en.wikipedia.org/wiki/WebAssembly) (WASM): This a newer way gaining a lot of popularity. All modules are compiled to WASM and can be dynamically loaded. It is an [established standard](https://webassembly.org/) supported in popular browsers and many different operating systems. Many programming languages can compile to WASM. Most of the runtimes provide also permission management (e.g. on the filesystem and network level). One does not need different binaries for each platform - it is the same binary across all platforms. There is a clear separation of memory between application and modules. Most of the WASM runtimes have a capabilities/permission model through WASI (see [here](https://github.com/bytecodealliance/wasmtime/blob/main/docs/WASI-capabilities.md)) enabling defining security policies around modules.
+* Use [WebAssembly](https://en.wikipedia.org/wiki/WebAssembly) (WASM): This a newer way gaining a lot of popularity. All modules are compiled to WASM and can be dynamically loaded. It is an [established standard](https://webassembly.org/) supported in popular browsers and many different operating systems. Many programming languages can compile to WASM. Most of the runtimes provide also permission management (e.g. on the filesystem and network level). One does not need different binaries for each platform - it is the same binary across all platforms. There is a clear separation of memory between application and modules. Most of the WASM runtimes have a capabilities/permission model through WASI (see [here](https://github.com/bytecodealliance/wasmtime/blob/main/docs/WASI-capabilities.md)) enabling defining security policies around modules. For instance, one can define a policy that module A is not allowed to access the network, but local storage. Module B is allowed to access the network, but not local storage.
 
 
 Note: the [C++ ABI](https://gcc.gnu.org/onlinedocs/libstdc++/manual/abi.html) - has a similar issue as the Rust ABI - it is not widely used and similar to the C ABI also not standardized. 
@@ -36,6 +36,7 @@ Note: the [C++ ABI](https://gcc.gnu.org/onlinedocs/libstdc++/manual/abi.html) - 
 While WASM is the final choice, because it fits all criteria of the use case, there are still some aspects yet missing to fit the use case of ZuSearch:
 * 64-Bit memory - large scale search applications - especially with a lot of documents and/or machine learning augmented search - require a lot of memory. Currently, only 32-bit of memory are supported, but the standardization of 64-bit memory is on its way (see [here](https://github.com/WebAssembly/memory64/blob/main/proposals/memory64/Overview.md)). Nevertheless, since each module can have up to 4 GB and each thread can instantiate their own module this might be not as limiting as one might think, but it limits more flexibility/practicality.
 * Threads (see [here](https://github.com/WebAssembly/threads/blob/master/proposals/threads/Overview.md) for the proposal)- This is mainly for the main application that will create threads and instantiate from those threads individual WASM modules.
+* Multi-Memory (see [here](https://github.com/WebAssembly/multi-memory/blob/main/proposals/multi-memory/Overview.md)) provide multiple independent memory areas for a WASM module. This is especially relevant for our use case to increase safety as well as security for the data exchange between application and module. Currently, if the application or the module contains a bug, the application could accidently write into the wrong part of the memory leading to malfunction of the module.
 * Component model - especially WASM Interface Types (WIT). At the moment, an application can only share with a module a common memory ("Store") or simple integer parameters. However, ZuSearch likely will involve complex interfaces with different basic types (e.g. strings) or complex structures (e.g. arrays, structs etc.). While they can be handed over in memory - there is no standard on how a string or structure looks like and every programming language represents them differently. A standard can help here to reduce the development efforts especially in differrent programming languages. Instead of WIT and given the use case of ZuSearch of large data, [Arrow](https://github.com/apache/arrow-rs) might be a more suitable alternative than WIT. See [here](https://github.com/WebAssembly/component-model) for the standardization and [here](https://radu-matei.com/blog/intro-wasm-components/) for a blog describing more practical aspects. 
 * Exception handling - exceptions do not currently interrupt execution of the application and/or module. See [here](https://github.com/WebAssembly/exception-handling/blob/master/proposals/exception-handling/Exceptions.md) for the standardization
 * Module repository. Many programming languages have module repositories (e.g. Maven Central for Java, Pypi for Python, NPM for Javascript/Typescript etc.) that include (binary/transpiled etc.) version of the modules to be loaded by an application (usually at compile time, but also at runtime). The way to access them is standardized. WASM has no standard for module repositories, but there are multiple competing once (see e.g. this [blog post](https://zuinnote.eu/blog/?p=1567)). The usage of module repositories compared
@@ -62,7 +63,9 @@ A crucial part is how the application and the modules exchange data via the shar
 
 # Study
 The study here is a very simple application written in Rust that loads dynamically a module written in Rust compiled to WASM:
-* [wasm-app](./wasm-app/) - the main application that loads dynamically module1 with a parameter
+* [wasm-app](./wasm-app/) - the main application that 
+  * loads dynamically the functions in module1 with a parameter string and get a string as return
+  * loads dynamically the function in module2 with data in Arrow IPC serialization format ands gets some data in Arrow IPC serialization format back
 * [wasm-module1](./wasm-module1/) - an example module that has one function with a parameter name that returns the string "Hello World, Name!".
   * Covers exchange via C ABI types and Rust ABI types
   * C ABI is with a parameter pointer to a CString in the WASM module memory containing the name. Return is a pointer in the WASM module memory containing the greeting as a CString
@@ -74,8 +77,11 @@ We compile in Rust the module to the target "wasm32-wasi" (see [here](https://do
 
 Note: We also link the WASI modules dynamically into the module. However, WASI is still experimental and standardization not finalized. We could also circumwent the use of WASI (e.g. by not relying on std etc.), but since WASI will anyway be needed for the use case of ZuSearch (e.g. file, network accesss as well as corresponding permissions) we included it also in the study.
 
-
 ## Flow to exchange data between the application and the modules
+Currently, each WASM module is loaded into a memory. The application calling the module can write to this memory to exchange data with the module. The problem is that the application does not know where it can write the data. Hence, each module - as our examples - need to provide a function to the application ("allocate") that returns an area where it can safely write data. Additionally, the module needs also to provide a function that frees the data ("deallocate") after the application has finished processing the results of a function call.
+
+Note: In the future
+
 shared memory etc.
 TBD
 ```mermaid
@@ -85,6 +91,23 @@ TBD
       B-->D;
       C-->D;
 ```
+# Build and run
+You can build the modules by executing the following command in their folder:
+```
+cargo build --release --target wasm32-wasi
+```
+
+The reason for building a release is that otherwise the module2 containing a wasi runtime and the Arrow library becomes very large and loading it in the application takes ages.
+
+You can build the application by running the following command:
+```
+cargo build 
+```
+
+You can then run the application by executing target/debug/wasm-app
+
+Note: The application itself is not compiled to WASM. This is at the moment not possible (e.g. lack of thread support in WASM etc.), but is of lesser relevance for now for the study and also because it will have minimal functionality itself and all the functionality is implemented by modules.
+
 
 # Observations
 

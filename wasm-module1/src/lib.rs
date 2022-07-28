@@ -18,7 +18,7 @@ pub extern "C" fn answer() -> i32 {
 // Note: This is really an execption as allocate by the app to the module should have only for parameters
 // Otherwise it would be really bad for performance.
 thread_local!(
-    static memory_areas: RefCell<HashMap<*const u8, (usize, ManuallyDrop<Box<[u8]>>)>> =
+    static MEMORY_AREAS: RefCell<HashMap<*const u8, (usize, ManuallyDrop<Box<[u8]>>)>> =
         RefCell::new(HashMap::new());
 );
 
@@ -44,10 +44,10 @@ pub extern "C" fn wasm_allocate(size: u32) -> *const u8 {
 /// * `ptr` - mutuable pointer to the memory to deallocate
 /// returns a code if it was successful or not
 #[no_mangle]
-pub extern "C" fn wasm_deallocate(mut ptr: *const u8) -> i32 {
+pub extern "C" fn wasm_deallocate(ptr: *const u8) -> i32 {
     // check if the ptr exists
     let cell: Cell<Option<(usize, ManuallyDrop<Box<[u8]>>)>> = Cell::new(None);
-    memory_areas.with(|mem_map| cell.set(mem_map.borrow_mut().remove(&ptr)));
+    MEMORY_AREAS.with(|mem_map| cell.set(mem_map.borrow_mut().remove(&ptr)));
     let memory_area: Option<(usize, ManuallyDrop<Box<[u8]>>)> = cell.into_inner();
     match memory_area {
         Some(x) => ManuallyDrop::into_inner(x.1), // will then be deleted after function returns
@@ -122,7 +122,6 @@ pub extern "C" fn wasm_memory_rust_format_hello_world(offset: *mut u32, length: 
     let allocated_result_string: ManuallyDrop<Box<[u8]>> = ManuallyDrop::new(result_string);
     // return position of WASM memory where we can find a offset, length pair
     let string_ptr = allocate(result_string_len, allocated_result_string);
-    let length = result_string_len;
     // prepare metadata
     let mut vec_meta: Vec<u8> = Vec::new();
     let string_ptr_array: [u8; (usize::BITS / 8) as usize] = (string_ptr as usize).to_le_bytes();
@@ -146,7 +145,7 @@ pub extern "C" fn wasm_memory_rust_format_hello_world(offset: *mut u32, length: 
 /// returns the size of the allocated memory area. It is 0 if the pointer is invalid
 pub fn validate_pointer(ptr: *const u8) -> usize {
     let cell: Cell<usize> = Cell::new(0);
-    memory_areas.with(|mem_map| match mem_map.borrow().get(&ptr) {
+    MEMORY_AREAS.with(|mem_map| match mem_map.borrow().get(&ptr) {
         Some(x) => cell.set(x.0),
         None => cell.set(0),
     });
@@ -162,7 +161,7 @@ pub fn validate_pointer(ptr: *const u8) -> usize {
 pub fn allocate(size: usize, alloc_box: ManuallyDrop<Box<[u8]>>) -> *const u8 {
     let result_ptr: *const u8 = alloc_box.as_ptr();
     // save allocated memory to avoid it is cleaned up after function exits
-    memory_areas.with(|mem_map| mem_map.borrow_mut().insert(result_ptr, (size, alloc_box)));
+    MEMORY_AREAS.with(|mem_map| mem_map.borrow_mut().insert(result_ptr, (size, alloc_box)));
     return result_ptr;
 }
 
