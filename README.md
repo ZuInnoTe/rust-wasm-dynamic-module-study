@@ -109,6 +109,7 @@ This is a lot of code for simply calling a function of the module with a name ("
 * The application needs to explicitly call the deallocate function of the module to release the memory for the parameter and the result - otherwise the shared memory area fill be filled with data that is not needed anymore
 * The application prints out the result to the console
 
+The concept works for the exchange of Arrow serialized data similarly. In this case module_2 proceseses the data in Arrow IPC format provided by the application.
 # Build and run
 You can build the modules by executing the following command in their folder:
 ```
