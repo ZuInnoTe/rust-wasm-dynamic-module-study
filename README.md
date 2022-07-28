@@ -80,17 +80,35 @@ Note: We also link the WASI modules dynamically into the module. However, WASI i
 ## Flow to exchange data between the application and the modules
 Currently, each WASM module is loaded into a memory. The application calling the module can write to this memory to exchange data with the module. The problem is that the application does not know where it can write the data. Hence, each module - as our examples - need to provide a function to the application ("allocate") that returns an area where it can safely write data. Additionally, the module needs also to provide a function that frees the data ("deallocate") after the application has finished processing the results of a function call.
 
-Note: In the future
+Note: Once Multi-Memory is supported by WASM you should exchange data via dedicated memories for paramater exchange: one for parameters from the application to the module and another one from the module to the application. You will still need allocation functions (that are application internal and one module internal), so that in case of multi-threading the threads do not overwrite each others data. 
 
-shared memory etc.
-TBD
+Find here an illustration of the current situation (only one memory for the module is possible and it is shared with the application) using the steps as pseudocode.
+
 ```mermaid
-  graph TD;
-      A-->B;
-      A-->C;
-      B-->D;
-      C-->D;
+sequenceDiagram
+    Application->>+Application: name="test"
+    Application->>+Module_1: ptr=allocate(len(name))
+    Module_1->>+Module_1:MEMORY_AREAS.insert(ptr, len(name))
+    Module_1->>+Application: memory_offset_parameter
+    Application->>+Application: write_to_memory_module_1(name, memory_offset_parameter)
+    Module_1->>+Module_1: validate_pointer(MEMORY_AREAS.get(memory_offset_parameter))
+    Module_1->>+Module_1: answer="Hello World, test!"
+    Module_1->>+Module_1: result_ptr=allocate(len(answer))
+    Module_1->>+Application: result_ptr
+    Application->>+Application: result=read_from_memmory_module_1(result_ptr)
+    Application->>+Module_1: deallocate(ptr)       
+    Application->>+Module_1: deallocate(result_ptr)
+    Application->>+Application: println!("{}",result)
 ```
+
+This is a lot of code for simply calling a function of the module with a name ("test") that returns a greeting as string ("Hello World, Test!") that is then printed to the console by the application. Some important aspects:
+* The application needs to request from the module a free memory area in the shared memory to store the parameter (e.g. "test")
+* The application needs to write the string in a format (see discussion above on ABIs and Arrow serialization) that the module understands to the allocated shared memory areas
+* The Module also needs to reserve an area in the memory to store its answer and send the pointer to this answer in the shared memory to the application
+* The application needs to read the answer from the shared memory
+* The application needs to explicitly call the deallocate function of the module to release the memory for the parameter and the result - otherwise the shared memory area fill be filled with data that is not needed anymore
+* The application prints out the result to the console
+
 # Build and run
 You can build the modules by executing the following command in their folder:
 ```
