@@ -17,7 +17,8 @@ All those aspects can be summarized as follows:
 * Modules can be loaded dynamically based on a need basis
 * Modules can be load securely - this means all interactions happen through precise interfaces, clear memory separation (no rouge module can bring down the whole application) and we can define additional policies what a module is allowed to do and what not (e.g. access to filesystem)
 * There are potential large data volumes to be exchanged between modules - it is not only about parameters and some return values
-
+## Blog
+Find additional considerations in [this blog post](https://zuinnote.eu/blog/?p=2037).
 ## Code
 The code is available under:
 * Codeberg (a non-commercial European hosted Git for Open Source): https://codeberg.org/ZuInnoTe/rust-wasm-dynamic-module-study
