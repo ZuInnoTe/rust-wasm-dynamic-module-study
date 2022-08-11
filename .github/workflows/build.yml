@@ -1,7 +1,7 @@
 name: rust-wasm-study
 on: [push]
 env:
-    RUSTUP_TOOLCHAIN: "1.62.1"
+    RUSTUP_TOOLCHAIN: "1.63"
     RUSTUP_HOME: "./rust/rustup"
     CARGO_HOME: "./rust/cargo"
 
