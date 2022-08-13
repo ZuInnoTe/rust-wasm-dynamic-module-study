@@ -9,7 +9,7 @@ The study contributes to [ZuSearch](https://codeberg.org/ZuInnoTe/zusearch) - a 
 
 Rust was selected as the language to write the highly modular search engine and most of its modules. However, thirdparty modules could also be written in other languages.
 
-Furthermore, the core engine is extremely lightweight - ideally it loads only modules in a secure way, but all other aspects that the user/developer needs are loaded dynamically from modules. 
+Furthermore, the core engine is extremely elightweight - ideally it loads only modules in a secure way, but all other aspects that the user/developer needs are loaded dynamically from modules. 
 
 All those aspects can be summarized as follows:
 * Core engine written in Rust that can be extended with modules written in (nearly) any language
@@ -142,7 +142,7 @@ Note: The application itself is not compiled to WASM. This is at the moment not 
   * It is not clear if the WASM component model interface types bring any advantage over using Apache Arrow for exchange as the WASM component model interface types is merely for calling functions with parameters and return values. Especially since for the case of ZuSearch, we do not have necessarily complex module interfaces, but the main focus is (large) data processing.
 * Each module will have to provide an allocate function, so that one does not write arbitrarily in the modules working memory
 * Apache Arrow seems to increase the module size 2x in release mode (4 instead of 2 MB)
-* Loading the module containing Apache Arrow Processing takes initially some time (10-20 seconds), but once the module is loaded the functions for processing Arrow data seem to be comparable fast (tested without WASM threat and SIMD support enabled).
+* You need to compile the modules and the app with the flag --release to have the right performance
 * If we exchange a lot of data between modules, one should avoid to return a copy of the data with some modification as this always implies at least have double of the memory size. For example let us assume you have the data ```{"doc1": {title: "test", cotent:"this is a test"}, "doc2": {title: "spare thing", cotent:"this is a spare part"}``` and you have a function that replaces all occureances of "part" with "piece" then the function would still return the full data, ie including doc1 and the title of doc2, although they are not modified at all. Here one may better replace the data in-place (maybe with some indicator if it has changed and the new size of the data).
 * The shared memory might need to grow and this is not automatic - it has to be initiated, ie one needs to check if the data to be written still fits into the memory - a simple and clear function need to be written for this. While this is not an issue with rather standard WASM modules, it will be for the use case of ZuSearch as often the default page size might not be sufficient. The default page seems to be somehow standardized (?) around 64 KB (see [here](https://docs.rs/wasmtime-environ/latest/wasmtime_environ/constant.WASM_PAGE_SIZE.html) for wasmtime), but may be different in certain scenarios.
 * There is some inherent memory safety of the shared memory, e.g. one cannot read more then what is available and with a clear separation of memory of different modules (and/or different threads of the same module) one can avoid that they read/write in each memory. Also the modules cannot write into the application memory (*unless a callback is imported by the application that allows to write into memory in an unsafe way)
