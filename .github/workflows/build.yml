@@ -28,6 +28,7 @@ jobs:
               rustup install $RUSTUP_TOOLCHAIN
               rustup target add wasm32-wasi --toolchain $RUSTUP_TOOLCHAIN
               rustup target add wasm32-unknown-unknown --toolchain $RUSTUP_TOOLCHAIN
+              rustup target add wasm64-unknown-unknown --toolchain $RUSTUP_TOOLCHAIN
      - name: Configure Rust and display version
        run: |
            echo "PATH=$(dirname $(rustup which cargo)):$PATH" >> $GITHUB_ENV
