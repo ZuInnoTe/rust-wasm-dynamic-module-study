@@ -1,7 +1,7 @@
 name: rust-wasm-study
 on: [push]
 env:
-    RUSTUP_TOOLCHAIN: "1.65"
+    RUSTUP_TOOLCHAIN: "1.66"
     RUSTUP_HOME: "./rust/rustup"
     CARGO_HOME: "./rust/cargo"
 
@@ -42,4 +42,4 @@ jobs:
           cargo build --release --target wasm32-wasi
           cd ..
           cd wasm-app
-          cargo build
+          cargo build --release
