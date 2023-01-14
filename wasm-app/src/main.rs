@@ -117,7 +117,7 @@ fn wrapper_answer(engine: &Engine, module: &Module) -> anyhow::Result<i32> {
         .get_func(&mut store, "answer")
         .expect("`answer` was not an exported function");
     // validate that it corresponds to the parameters and return types we need
-    let func_validated = func_def.typed::<(), i32, _>(&store)?;
+    let func_validated = func_def.typed::<(), i32>(&store)?;
     // call function
     let result = func_validated.call(&mut store, ())?;
     Ok(result)
@@ -165,7 +165,7 @@ fn wrapper_wasm_c_format_hello_world(
         .get_func(&mut store, "wasm_memory_c_format_hello_world")
         .expect("`wasm_memory_c_format_hello_world` was not an exported function");
     // validate that it corresponds to the parameters and return types we need
-    let func_validated = func_def.typed::<u32, i32, _>(&store)?;
+    let func_validated = func_def.typed::<u32, i32>(&store)?;
 
     // prepare handing over CString as input
     // instantiate memory
@@ -244,7 +244,7 @@ fn wrapper_wasm_rust_format_hello_world(
         .get_func(&mut store, "wasm_memory_rust_format_hello_world")
         .expect("`wasm_memory_rust_format_hello_world` was not an exported function");
     // validate that it corresponds to the parameters and return types we need
-    let func_validated = func_def.typed::<(u32, u32), u32, _>(&store)?;
+    let func_validated = func_def.typed::<(u32, u32), u32>(&store)?;
 
     // prepare handing over Rust as input
     // instantiate memory
@@ -345,7 +345,7 @@ fn wrapper_wasm_process_data_arrow(engine: &Engine, module: &Module) -> anyhow::
         .get_func(&mut store, "wasm_memory_process_data_arrow")
         .expect("`wasm_memory_process_data_arrow` was not an exported function");
     // validate that it corresponds to the parameters and return types we need
-    let func_validated = func_def.typed::<(u32, u32, u32, u32), u32, _>(&store)?;
+    let func_validated = func_def.typed::<(u32, u32, u32, u32), u32>(&store)?;
 
     // prepare handing Arrow data
     let serialized_meta_data = create_arrow_example_meta_data();
@@ -468,7 +468,7 @@ fn wrapper_wasm_allocate(
         .get_func(&mut store, "wasm_allocate")
         .expect("`wasm_allocate` was not an exported function");
     // validate that it corresponds to the parameters and return types we need
-    let func_validated = func_def.typed::<u32, u32, _>(&store)?;
+    let func_validated = func_def.typed::<u32, u32>(&store)?;
     // call function
     let result = func_validated.call(&mut store, size)?;
     Ok(result as *const u8)
@@ -488,7 +488,7 @@ fn wrapper_wasm_deallocate(
         .get_func(&mut store, "wasm_deallocate")
         .expect("`wasm_deallocate` was not an exported function");
     // validate that it corresponds to the parameters and return types we need
-    let func_validated = func_def.typed::<u32, i32, _>(&store)?;
+    let func_validated = func_def.typed::<u32, i32>(&store)?;
     // call function
     let result = func_validated.call(&mut store, ptr as u32)?;
     Ok(result)
@@ -513,10 +513,8 @@ fn create_arrow_example_data() -> Vec<u8> {
     let ids = UInt64Array::from(vec![1]);
     let contents = StringArray::from(vec!["this is a test"]);
     let titles = StringArray::from(vec!["test"]);
-    let dates = TimestampSecondArray::from_vec(
-        vec![datetime!(2022-01-01 12:00:00 UTC).unix_timestamp()],
-        Some("+00:00".to_string()),
-    );
+    let dates = TimestampSecondArray::from(vec![datetime!(2022-01-01 12:00:00 UTC).unix_timestamp()]).with_timezone("+00:00".to_string());
+
     let scores = Float64Array::from(vec![1.123456f64]);
 
     // build a record batch
