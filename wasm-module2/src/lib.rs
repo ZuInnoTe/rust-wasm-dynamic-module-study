@@ -113,7 +113,7 @@ pub extern "C" fn wasm_memory_process_data_arrow(
         assert_eq!(arrow_record_batch.schema().field(1).name(), "config");
         assert_eq!(
             arrow_record_batch.schema().field(1).data_type(),
-            &DataType::Struct(vec![Field::new("filename", DataType::Utf8, false)])
+            &DataType::Struct(arrow::datatypes::Fields::from(vec![Field::new("filename", DataType::Utf8, false)]))
         );
 
         // validate meta_data
@@ -151,7 +151,7 @@ pub extern "C" fn wasm_memory_process_data_arrow(
         assert_eq!(arrow_record_batch.schema().field(3).name(), "date");
         assert_eq!(
             arrow_record_batch.schema().field(3).data_type(),
-            &DataType::Timestamp(TimeUnit::Second, Some("+00:00".to_string()))
+            &DataType::Timestamp(TimeUnit::Second, Some("+00:00".to_string().into()))
         );
         assert_eq!(arrow_record_batch.schema().field(4).name(), "score");
         assert_eq!(

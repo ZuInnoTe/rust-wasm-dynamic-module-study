@@ -5,7 +5,7 @@ State: 16.07.2022
 
 This is a small example to use Rust for an application to load dynamically another application module targetting wasm32-wasi. This target enables compilation to [Webassembly](https://webassembly.org/) (WASM). Originally WASM was a framework for secure near-native speed browser applications, it has been extended in the past to serve the needs of all types of cross-platform secure near-native applications, such as server-based or serverless ones. See also this [blog post](https://zuinnote.eu/blog/?p=1567) to find out more on the WASM ecosystem.
 
-The study contributes to [ZuSearch](https://codeberg.org/ZuInnoTe/zusearch) - a highly modular secure search engine for all types of platforms. Since modularity is core concept of this engine, it is crucial to assess the different possibilities to realize modularity (see also [here](https://zuinnote.eu/blog/?p=540)). The outcomes should be interpreted towards the use case of ZuSearch and not be generalized.
+The study contributes to [Zu Stateful Data Pipelines (ZuStDPipe)](https://codeberg.org/ZuInnoTe/zustdpipe) - a highly modular secure stateful data pipeline engine for all types of platforms. Since modularity is core concept of this engine, it is crucial to assess the different possibilities to realize modularity (see also [here](https://zuinnote.eu/blog/?p=540)). The outcomes should be interpreted towards the use case of ZuSearch and not be generalized.
 
 Rust was selected as the language to write the highly modular search engine and most of its modules. However, third party modules could also be written in other languages.
 

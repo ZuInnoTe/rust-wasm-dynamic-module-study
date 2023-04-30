@@ -505,7 +505,7 @@ fn create_arrow_example_data() -> Vec<u8> {
         Field::new("title", DataType::Utf8, false),
         Field::new(
             "date",
-            DataType::Timestamp(TimeUnit::Second, Some("+00:00".to_string())),
+            DataType::Timestamp(TimeUnit::Second, Some("+00:00".to_string().into())),
             false,
         ),
         Field::new("score", DataType::Float64, false),
@@ -548,7 +548,7 @@ fn create_arrow_example_meta_data() -> Vec<u8> {
         Field::new("command", DataType::Utf8, false),
         Field::new(
             "config",
-            DataType::Struct(vec![Field::new("filename", DataType::Utf8, false)]),
+            DataType::Struct(arrow::datatypes::Fields::from(vec![Field::new("filename", DataType::Utf8, false)])),
             false,
         ),
     ]);
