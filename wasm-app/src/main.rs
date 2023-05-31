@@ -13,7 +13,7 @@ use std::ffi::CString;
 use std::sync::Arc;
 
 use arrow::array::{
-    Array, Float64Array, StringArray, StructArray, TimestampSecondArray, UInt64Array,
+    Array, ArrayRef, Float64Array, StringArray, StructArray, TimestampSecondArray, UInt64Array,
 };
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use arrow::ipc::reader::StreamReader;
@@ -556,8 +556,8 @@ fn create_arrow_example_meta_data() -> Vec<u8> {
     let command = StringArray::from(vec!["test"]);
 
     let config = StructArray::from(vec![(
-        Field::new("filename", DataType::Utf8, false),
-        Arc::new(StringArray::from(vec!["test.txt"])) as Arc<dyn Array>,
+        Arc::new(Field::new("filename", DataType::Utf8, false)),
+        Arc::new(StringArray::from(vec!["test.txt"])) as  ArrayRef,
     )]);
     // build a record batch
     let batch = RecordBatch::try_new(

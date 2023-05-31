@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = {version = "1.0.71"}
-arrow = { version = "38.0.0", default-features = false, features = ["ipc","prettyprint"] }
-time = {version = "0.3.20", features = ["macros"]}
-wasmtime = { version = "8.0.1"}
-wasmtime-wasi = { version = "8.0.1"}
+arrow = { version = "40.0.0", default-features = false, features = ["ipc","prettyprint"] }
+time = {version = "0.3.21", features = ["macros"]}
+wasmtime = { version = "9.0.2"}
+wasmtime-wasi = { version = "9.0.2"}
