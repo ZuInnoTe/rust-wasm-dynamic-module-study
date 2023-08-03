@@ -13,7 +13,7 @@ use std::ffi::CString;
 use std::sync::Arc;
 
 use arrow::array::{
-    Array, ArrayRef, Float64Array, StringArray, StructArray, TimestampSecondArray, UInt64Array,
+    ArrayRef, Float64Array, StringArray, StructArray, TimestampSecondArray, UInt64Array,
 };
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use arrow::ipc::reader::StreamReader;
@@ -513,7 +513,9 @@ fn create_arrow_example_data() -> Vec<u8> {
     let ids = UInt64Array::from(vec![1]);
     let contents = StringArray::from(vec!["this is a test"]);
     let titles = StringArray::from(vec!["test"]);
-    let dates = TimestampSecondArray::from(vec![datetime!(2022-01-01 12:00:00 UTC).unix_timestamp()]).with_timezone("+00:00".to_string());
+    let dates =
+        TimestampSecondArray::from(vec![datetime!(2022-01-01 12:00:00 UTC).unix_timestamp()])
+            .with_timezone("+00:00".to_string());
 
     let scores = Float64Array::from(vec![1.123456f64]);
 
@@ -548,7 +550,11 @@ fn create_arrow_example_meta_data() -> Vec<u8> {
         Field::new("command", DataType::Utf8, false),
         Field::new(
             "config",
-            DataType::Struct(arrow::datatypes::Fields::from(vec![Field::new("filename", DataType::Utf8, false)])),
+            DataType::Struct(arrow::datatypes::Fields::from(vec![Field::new(
+                "filename",
+                DataType::Utf8,
+                false,
+            )])),
             false,
         ),
     ]);
@@ -557,7 +563,7 @@ fn create_arrow_example_meta_data() -> Vec<u8> {
 
     let config = StructArray::from(vec![(
         Arc::new(Field::new("filename", DataType::Utf8, false)),
-        Arc::new(StringArray::from(vec!["test.txt"])) as  ArrayRef,
+        Arc::new(StringArray::from(vec!["test.txt"])) as ArrayRef,
     )]);
     // build a record batch
     let batch = RecordBatch::try_new(
