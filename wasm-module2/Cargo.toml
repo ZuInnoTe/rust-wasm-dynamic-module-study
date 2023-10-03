@@ -9,5 +9,5 @@ edition = "2021"
 crate-type = ['cdylib']
 
 [dependencies]
-arrow = { version = "46.0.0", default-features = false, features = ["ipc"] }
+arrow = { version = "47.0.0", default-features = false, features = ["ipc"] }
 time = {version = "0.3.21", features = ["macros"]}
