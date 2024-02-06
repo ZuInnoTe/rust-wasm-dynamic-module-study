@@ -419,17 +419,6 @@ fn wrapper_wasm_process_data_arrow(engine: &Engine, module: &Module) -> anyhow::
             result_ptr.try_into().unwrap(),
             &mut result_arrow_ipc_buffer,
         )?;
-        // deallocate shared WASM Module memory
-        let dealloc_meta_data_code: i32 =
-            wrapper_wasm_deallocate(instance, &mut store, offset_meta_data as *const u8).unwrap();
-        if dealloc_meta_data_code != 0 {
-            println!("Error: Could not deallocate shared WASM module memory for meta data");
-        }
-        let dealloc_data_code: i32 =
-            wrapper_wasm_deallocate(instance, &mut store, offset_data as *const u8).unwrap();
-        if dealloc_data_code != 0 {
-            println!("Error: Could not deallocate shared WASM module memory for data");
-        }
         let dealloc_return_meta_code: i32 =
             wrapper_wasm_deallocate(instance, &mut store, result_offset as *const u8).unwrap();
         if dealloc_return_meta_code != 0 {
@@ -447,8 +436,20 @@ fn wrapper_wasm_process_data_arrow(engine: &Engine, module: &Module) -> anyhow::
         for item in stream_reader {
             print_batches(&[item.unwrap()]).unwrap();
         }
-        Ok("".to_string())
     }
+    // deallocate shared WASM Module memory
+    let dealloc_meta_data_code: i32 =
+        wrapper_wasm_deallocate(instance, &mut store, offset_meta_data as *const u8).unwrap();
+    if dealloc_meta_data_code != 0 {
+        println!("Error: Could not deallocate shared WASM module memory for meta data");
+    }
+    let dealloc_data_code: i32 =
+        wrapper_wasm_deallocate(instance, &mut store, offset_data as *const u8).unwrap();
+    if dealloc_data_code != 0 {
+        println!("Error: Could not deallocate shared WASM module memory for data");
+    }
+
+    Ok("".to_string())
 }
 
 /// Wrapper around the allocate function of the WASM module to allocate shared WASM memory. Allocate some memory for the application to write data for the module
