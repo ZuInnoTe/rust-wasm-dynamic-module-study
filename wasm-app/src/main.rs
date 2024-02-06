@@ -389,6 +389,17 @@ fn wrapper_wasm_process_data_arrow(engine: &Engine, module: &Module) -> anyhow::
             serialized_data_size as u32,
         ),
     )?;
+    // deallocate shared WASM Module memory
+    let dealloc_meta_data_code: i32 =
+        wrapper_wasm_deallocate(instance, &mut store, offset_meta_data as *const u8).unwrap();
+    if dealloc_meta_data_code != 0 {
+        println!("Error: Could not deallocate shared WASM module memory for meta data");
+    }
+    let dealloc_data_code: i32 =
+        wrapper_wasm_deallocate(instance, &mut store, offset_data as *const u8).unwrap();
+    if dealloc_data_code != 0 {
+        println!("Error: Could not deallocate shared WASM module memory for data");
+    }
     if result_offset == 0 {
         anyhow::bail!("Error: No valid answer received from function")
     } else {
@@ -437,18 +448,6 @@ fn wrapper_wasm_process_data_arrow(engine: &Engine, module: &Module) -> anyhow::
             print_batches(&[item.unwrap()]).unwrap();
         }
     }
-    // deallocate shared WASM Module memory
-    let dealloc_meta_data_code: i32 =
-        wrapper_wasm_deallocate(instance, &mut store, offset_meta_data as *const u8).unwrap();
-    if dealloc_meta_data_code != 0 {
-        println!("Error: Could not deallocate shared WASM module memory for meta data");
-    }
-    let dealloc_data_code: i32 =
-        wrapper_wasm_deallocate(instance, &mut store, offset_data as *const u8).unwrap();
-    if dealloc_data_code != 0 {
-        println!("Error: Could not deallocate shared WASM module memory for data");
-    }
-
     Ok("".to_string())
 }
 
