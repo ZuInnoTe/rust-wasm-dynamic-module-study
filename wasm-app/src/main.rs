@@ -6,7 +6,8 @@ use wasmtime::Instance;
 use wasmtime::Linker;
 use wasmtime::Module;
 use wasmtime::Store;
-use wasmtime_wasi::{sync::WasiCtxBuilder, WasiCtx};
+use wasi_common::sync::WasiCtxBuilder;
+use wasi_common::WasiCtx;
 
 use std::ffi::CStr;
 use std::ffi::CString;
@@ -101,7 +102,7 @@ fn init_wasm_module_2(engine: &Engine) -> anyhow::Result<Module> {
 fn wrapper_answer(engine: &Engine, module: &Module) -> anyhow::Result<i32> {
     // Load function an instantiate it
     let mut linker = Linker::new(&engine);
-    wasmtime_wasi::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
+    wasi_common::sync::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
     // store to exchange data with the WASM module
     let wasi = WasiCtxBuilder::new()
         .inherit_stdio()
@@ -140,7 +141,7 @@ fn wrapper_wasm_c_format_hello_world(
     let param_name_cstring_as_bytes: &[u8] = param_name_cstring.to_bytes_with_nul();
     // Load function an instantiate it
     let mut linker = Linker::new(&engine);
-    wasmtime_wasi::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
+    wasi_common::sync::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
     // store to exchange data with the WASM module
     let wasi = WasiCtxBuilder::new()
         .inherit_stdio()
@@ -228,7 +229,7 @@ fn wrapper_wasm_rust_format_hello_world(
 ) -> anyhow::Result<String> {
     // Load function an instantiate it
     let mut linker = Linker::new(&engine);
-    wasmtime_wasi::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
+    wasi_common::sync::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
     // store to exchange data with the WASM module
     let wasi = WasiCtxBuilder::new()
         .inherit_stdio()
@@ -329,7 +330,7 @@ fn wrapper_wasm_rust_format_hello_world(
 fn wrapper_wasm_process_data_arrow(engine: &Engine, module: &Module) -> anyhow::Result<String> {
     // Load function an instantiate it
     let mut linker = Linker::new(&engine);
-    wasmtime_wasi::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
+    wasi_common::sync::add_to_linker(&mut linker, |state: &mut MyState| &mut state.wasi)?;
     // store to exchange data with the WASM module
     let wasi = WasiCtxBuilder::new()
         .inherit_stdio()
