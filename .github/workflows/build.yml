@@ -26,7 +26,7 @@ jobs:
               mkdir -p $CARGO_HOME
               curl https://sh.rustup.rs -sSf | sh -s -- -y
               rustup install $RUSTUP_TOOLCHAIN
-              rustup target add wasm32-wasi --toolchain $RUSTUP_TOOLCHAIN
+              rustup target add wasm32-wasip1 --toolchain $RUSTUP_TOOLCHAIN
               rustup target add wasm32-unknown-unknown --toolchain $RUSTUP_TOOLCHAIN
      - name: Configure Rust and display version
        run: |
@@ -36,10 +36,10 @@ jobs:
      - name: Build Rust Wasm Study
        run: | 
           cd wasm-module1
-          cargo build --release --target wasm32-wasi
+          cargo build --release --target wasm32-wasip1
           cd ..
           cd wasm-module2
-          cargo build --release --target wasm32-wasi
+          cargo build --release --target wasm32-wasip1
           cd ..
           cd wasm-app
           cargo build --release

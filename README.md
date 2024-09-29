@@ -75,7 +75,7 @@ The study here is a very simple application written in Rust that loads dynamical
 * [wasm-module2](./wasm-module2/) - an example module that has a functions with two parameters: a pointer to serialized data in Arrow IPC format and the size of the serializeed data. Return is a pointer n the WASM module memory to the processed serialized data by the function in Arrow IPC format and the size of the serialized data. We can implement in Arrow mandatory attributes of a document (e.g. id etc.) and also more flexible dictionaries by having an Array of the struct(key,value), e.g. [{key: "category",value:"news"}]
 
 
-We compile in Rust the module to the target "wasm32-wasi" (see [here](https://doc.rust-lang.org/stable/nightly-rustc/rustc_target/spec/wasm32_wasi/index.html)).
+We compile in Rust the module to the target "wasm32-wasip1" (see [here](https://dev-doc.rust-lang.org/stable/rustc/platform-support/wasm32-wasip1.html)).
 
 Note: We also link the WASI modules dynamically into the module. However, WASI is still experimental and standardization not finalized. We could also circumwent the use of WASI (e.g. by not relying on std etc.), but since WASI will anyway be needed for the use case of ZuSearch (e.g. file, network accesss as well as corresponding permissions) we included it also in the study.
 
@@ -116,14 +116,14 @@ The concept works for the exchange of Arrow serialized data similarly. In this c
 # Build and run
 You can build the modules by executing the following command in their folder:
 ```
-cargo build --release --target wasm32-wasi
+cargo build --release --target wasm32-wasip1
 ```
 
 The reason for building a release is that otherwise the module2 containing a wasi runtime and the Arrow library becomes very large and loading it in the application takes ages.
 
 You can build the application by running the following command:
 ```
-cargo build 
+cargo build
 ```
 
 You can then run the application by executing target/debug/wasm-app
@@ -133,8 +133,8 @@ Note: The application itself is not compiled to WASM. This is at the moment not 
 
 # Observations
 
-* The application cannot be compiled to wasm32-wasi yet (although desired for the future to leverage WASM also in the ZuSearch core), because wasmtime or more specifically WASI does not seem to support this yet.
-* The modules can be compiled to wasm32-wasi and loaded by the application.
+* The application cannot be compiled to wasm32-wasip1 yet (although desired for the future to leverage WASM also in the ZuSearch core), because wasmtime or more specifically WASI does not seem to support this yet.
+* The modules can be compiled to wasm32-wasip1 and loaded by the application.
 * We use cdylib annoation to create the WASM, but cdylib itself is not needed - this is needed because the WASM Interface Type (WIT), ie the WASM component model is not yet fully specified and implemented
 * Including the wasmtime runtime in the application leads to a larger single binary (ca. 14 MB wasmtime 0.38.1 compiled as release). While the size is not very large, it limits the type of embedded device where to deploy it. However, the use case of ZuSearch also does not justify to embed it on any device (e.g. Arduino would be out of scope).
 * While there is a WASM Component Example (cf. [here](https://github.com/radu-matei/wasm-components-example)) - it only describes static linking at compile time and it is unclear yet if this works at runtime as well. As mentioned, for our use case probably exchanging data via Arrow is the better choice in any case and we can do it already now.
