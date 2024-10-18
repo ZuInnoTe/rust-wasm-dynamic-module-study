@@ -77,7 +77,7 @@ The study here is a very simple application written in Rust that loads dynamical
 
 We compile in Rust the module to the target "wasm32-wasip1" (see [here](https://dev-doc.rust-lang.org/stable/rustc/platform-support/wasm32-wasip1.html)).
 
-Note: We also link the WASI modules dynamically into the module. However, WASI is still experimental and standardization not finalized. We could also circumwent the use of WASI (e.g. by not relying on std etc.), but since WASI will anyway be needed for the use case of ZuSearch (e.g. file, network accesss as well as corresponding permissions) we included it also in the study.
+Note: We also link the WASI modules dynamically into the module. However, WASI is still experimental and standardization not finalized. We could also circumwent the use of WASI (e.g. by not relying on std etc.), but since WASI will anyway be needed for the use case of ZuStdPipe (e.g. file, network accesss as well as corresponding permissions) we included it also in the study.
 
 ## Flow to exchange data between the application and the modules
 Currently, each WASM module is loaded into a memory. The application calling the module can write to this memory to exchange data with the module. The problem is that the application does not know where it can write the data. Hence, each module - as our examples - need to provide a function to the application ("allocate") that returns an area where it can safely write data. Additionally, the module needs also to provide a function that frees the data ("deallocate") after the application has finished processing the results of a function call.
