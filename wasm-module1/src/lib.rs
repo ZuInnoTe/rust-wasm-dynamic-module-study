@@ -9,7 +9,7 @@ use std::ptr;
 
 /// A simple function returning a number as this is the most simple and native data type supported by WASM
 /// returns a number
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn answer() -> i32 {
     return 42;
 }
@@ -32,7 +32,7 @@ enum MemoryAreasReturnCode {
 /// # Arguments
 /// * `size` - size of memory to allocaten
 /// returns a pointer to the allocated memory area
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_allocate(size: u32) -> *const u8 {
     // create a Box with empty memory
     let alloc_box = ManuallyDrop::new(vec![0u8; size as usize].into_boxed_slice());
@@ -43,7 +43,7 @@ pub extern "C" fn wasm_allocate(size: u32) -> *const u8 {
 /// # Arguments
 /// * `ptr` - mutuable pointer to the memory to deallocate
 /// returns a code if it was successful or not
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_deallocate(ptr: *const u8) -> i32 {
     // check if the ptr exists
     let cell: Cell<Option<(usize, ManuallyDrop<Box<[u8]>>)>> = Cell::new(None);
@@ -62,7 +62,7 @@ pub extern "C" fn wasm_deallocate(ptr: *const u8) -> i32 {
 /// * `name` - pointer to a c string containing a name to greet
 /// Returns a pointer to a C string. Note: The calling application must signal to the module that the memory can be fred by calling deallocate on the returned pointer
 ///
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_memory_c_format_hello_world(name: *const i8) -> *const u8 {
     // validate pointer
     let expected_size: usize = validate_pointer(name as *const u8);
@@ -96,7 +96,7 @@ pub extern "C" fn wasm_memory_c_format_hello_world(name: *const i8) -> *const u8
 /// * `offset` - position of the start of the Rust str
 /// * `length` - length of the Rust str
 /// Returns an offset in the WASM module memory where an offset and length of the result greeting (a Rust str) are stored
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_memory_rust_format_hello_world(offset: *mut u32, length: u32) -> u32 {
     // validate pointer
     let expected_size_param: usize = validate_pointer(offset as *const u8);

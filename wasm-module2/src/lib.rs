@@ -32,7 +32,7 @@ enum MemoryAreasReturnCode {
 /// # Arguments
 /// * `size` - size of memory to allocaten
 /// returns a pointer to the allocated memory area
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_allocate(size: u32) -> *const u8 {
     // create a Box with empty memory
     let alloc_box = ManuallyDrop::new(vec![0u8; size as usize].into_boxed_slice());
@@ -43,7 +43,7 @@ pub extern "C" fn wasm_allocate(size: u32) -> *const u8 {
 /// # Arguments
 /// * `ptr` - mutuable pointer to the memory to deallocate
 /// returns a code if it was successful or not
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_deallocate(ptr: *const u8) -> i32 {
     // check if the ptr exists
     let cell: Cell<Option<(usize, ManuallyDrop<Box<[u8]>>)>> = Cell::new(None);
@@ -64,7 +64,7 @@ pub extern "C" fn wasm_deallocate(ptr: *const u8) -> i32 {
 /// * `data_offset` - position of the start of the data ("data") in Arrow IPC format
 /// * `data_size` - size of the data in Arrow IPC format
 /// Returns an offset in the WASM module memory where an offset and size of the result data in Arrow IPC format are stored
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_memory_process_data_arrow(
     meta_data_offset: *mut u32,
     meta_data_size: u32,
