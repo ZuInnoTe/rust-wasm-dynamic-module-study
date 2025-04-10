@@ -13,7 +13,6 @@ jobs:
        uses: actions/checkout@v4
        with:
           persist-credentials: false
-
      - name: Cache Rust
        id: cache-rust
        uses: actions/cache@v4
