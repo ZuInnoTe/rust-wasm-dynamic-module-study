@@ -12,7 +12,8 @@ jobs:
      - name: Checkout repository
        uses: actions/checkout@v4
        with:
-        submodules: recursive
+          persist-credentials: false
+
      - name: Cache Rust
        id: cache-rust
        uses: actions/cache@v4
