@@ -9,5 +9,5 @@ edition = "2024"
 crate-type = ['cdylib']
 
 [dependencies]
-arrow = { version = "54.2.0", default-features = false, features = ["ipc"] }
-time = {version = "0.3.37", features = ["macros"]}
+arrow = { version = "54.3.1", default-features = false, features = ["ipc"] }
+time = {version = "0.3.41", features = ["macros"]}
