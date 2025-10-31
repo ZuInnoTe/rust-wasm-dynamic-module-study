@@ -6,9 +6,9 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = {version = "1.0.98"}
-arrow = { version = "55.1.0", default-features = false, features = ["ipc","prettyprint"] }
-time = {version = "0.3.41", features = ["macros"]}
-wasmtime = { version = "32.0.0"}
-wasmtime-wasi = { version = "32.0.0"}
-wasi-common = { version = "32.0.0"}
+anyhow = {version = "1.0.100"}
+arrow = { version = "57.0.0", default-features = false, features = ["ipc","prettyprint"] }
+time = {version = "0.3.44", features = ["macros"]}
+wasmtime = { version = "38.0.3"}
+wasmtime-wasi = { version = "38.0.3", features = ["p1"]}
+wasi-common = { version = "38.0.3"}

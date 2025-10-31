@@ -75,7 +75,7 @@ fn init_wasm_module_1(engine: &Engine) -> anyhow::Result<Module> {
     // load WASM module
     let module = Module::from_file(
         &engine,
-        "../../../wasm-module1/target/wasm32-wasi/release/wasm_module1.wasm",
+        "../../../wasm-module1/target/wasm32-wasip1/release/wasm_module1.wasm",
     )?;
     Ok(module)
 }
@@ -89,7 +89,7 @@ fn init_wasm_module_2(engine: &Engine) -> anyhow::Result<Module> {
     // load WASM module
     let module = Module::from_file(
         &engine,
-        "../../../wasm-module2/target/wasm32-wasi/release/wasm_module2.wasm",
+        "../../../wasm-module2/target/wasm32-wasip1/release/wasm_module2.wasm",
     )?;
     Ok(module)
 }
