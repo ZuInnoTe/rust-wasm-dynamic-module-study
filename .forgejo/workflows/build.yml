@@ -1,0 +1,47 @@
+name: rust-wasm-study
+on: [push]
+env:
+    RUSTUP_TOOLCHAIN: "1.93.1"
+    RUSTUP_HOME: "./rust/rustup"
+    CARGO_HOME: "./rust/cargo"
+
+jobs:
+  build-rust-wasm-study:
+    runs-on: codeberg-medium-lazy
+    container:
+       image: registry.opensuse.org/opensuse/bci/nodejs:latest
+    steps:
+     - name: Checkout repository
+       uses: actions/checkout@v6
+       with:
+          persist-credentials: false
+     - name: Cache Rust
+       id: cache-rust
+       uses: actions/cache@v5
+       with:
+        path: rust
+        key: ${{ runner.os }}-rustup-${{env.RUSTUP_TOOLCHAIN}}
+     - name: Install rust
+       if: steps.cache-rust.outputs.cache-hit != 'true'
+       run: |
+              mkdir -p $RUSTUP_HOME
+              mkdir -p $CARGO_HOME
+              zypper in -y rustup
+              rustup install $RUSTUP_TOOLCHAIN
+              rustup target add wasm32-wasip1 --toolchain $RUSTUP_TOOLCHAIN
+              rustup target add wasm32-unknown-unknown --toolchain $RUSTUP_TOOLCHAIN
+     - name: Configure Rust and display version
+       run: |
+           echo "PATH=$(dirname $(rustup which cargo)):$PATH" >> $GITHUB_ENV
+           rustc --version
+           cargo --version
+     - name: Build Rust Wasm Study
+       run: | 
+          cd wasm-module1
+          cargo build --release --target wasm32-wasip1
+          cd ..
+          cd wasm-module2
+          cargo build --release --target wasm32-wasip1
+          cd ..
+          cd wasm-app
+          cargo build --release
